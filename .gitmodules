@@ -1,0 +1,9 @@
+[submodule "ego2robo"]
+	path = ego2robo
+	url = https://github.com/yongce-liu/ego2robo.git
+[submodule "ego_sim_render"]
+	path = ego_sim_render
+	url = https://github.com/yongce-liu/ego_sim_render.git
+[submodule "EgoDataPipe"]
+	path = EgoDataPipe
+	url = https://github.com/yongce-liu/EgoDataPipe.git
