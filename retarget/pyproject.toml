@@ -11,9 +11,12 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "dex-retargeting>=0.5.0",
     "general-motion-retargeting @ git+https://github.com/YanjieZe/GMR.git@bb1bbe40774794fceb2a7c579a3464a28e68c844",
+    "imageio>=2.36",
     "numpy",
     "loguru>=0.7.3",
     "tyro>=1.0.15",
+    "h5py>=3.16.0",
+    "pyarrow>=25.0.1",
 ]
 
 [tool.hatch.build.targets.wheel]

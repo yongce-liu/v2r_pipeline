@@ -81,16 +81,12 @@ def test_run_video_inpaint_with_vis(tmp_path: Path) -> None:
     assert entry["has_mask"] is True
     assert entry["inpainted_filename"] == "inpainted_000000.png"
     assert entry["vis_filename"] == "vis_000000.png"
-    edited = np.asarray(
-        Image.open(outputs.inpainted_dir / entry["inpainted_filename"])
-    )
+    edited = np.asarray(Image.open(outputs.inpainted_dir / entry["inpainted_filename"]))
     assert edited.shape == FRAME_SHAPE + (3,)
     assert tuple(edited[3, 3]) == (255, 0, 0)
 
     # Frame 2 had no mask -> passthrough, original unchanged.
-    passthrough = np.asarray(
-        Image.open(outputs.inpainted_dir / "inpainted_000002.png")
-    )
+    passthrough = np.asarray(Image.open(outputs.inpainted_dir / "inpainted_000002.png"))
     assert tuple(passthrough[3, 3]) == (80, 80, 80)  # frame index 2 gray
 
     config = json.loads(outputs.config_json_path.read_text(encoding="utf-8"))
@@ -118,9 +114,7 @@ def test_run_video_inpaint_max_frames(tmp_path: Path) -> None:
     masks_json, _ = _build_segmented_clip(tmp_path, frame_count=5)
     fake = FakeInpainter()
     outputs = run_video_inpaint(
-        InpaintVideoArgs(
-            masks_json=masks_json, output_root=tmp_path, max_frames=2
-        ),
+        InpaintVideoArgs(masks_json=masks_json, output_root=tmp_path, max_frames=2),
         inpainter=fake,
     )
 

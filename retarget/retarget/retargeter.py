@@ -84,11 +84,13 @@ class RobotRetargeter:
 
         self.dex_retargeter: DexHandRetargeter | None = None
         self.dex_joint_names: list[str] = []
+        self.dex_qpos_indices: np.ndarray | None = None
         if self.use_dex:
             self.dex_retargeter = build_dex_retargeter(
                 self.dex_hand_config, confidence_threshold
             )
             self.dex_joint_names = list(self.dex_retargeter.joint_names)
+            self.dex_qpos_indices = self._dex_qpos_indices()
             dex_joint_set = set(self.dex_joint_names)
             keep = [
                 i for i, name in enumerate(action_names) if name not in dex_joint_set
@@ -98,6 +100,34 @@ class RobotRetargeter:
 
         self.action_names = action_names
         self.qpos_indices = qpos_indices
+
+    def _dex_qpos_indices(self) -> np.ndarray:
+        """qpos columns of the dex hand joints, so hands can be folded into qpos.
+
+        The retargeted ``qpos`` is GMR's whole-model pose, which solves only the
+        body/arm task frames and leaves the finger joints untouched. For the
+        saved ``qpos`` to be a complete robot pose the dex hand values must be
+        written back in here, so every dex joint must exist in the robot model.
+        """
+        import mujoco as mj
+
+        model = self.model
+        name_to_qposadr = {
+            mj.mj_id2name(model, mj.mjtObj.mjOBJ_JOINT, joint_id): int(
+                model.jnt_qposadr[joint_id]
+            )
+            for joint_id in range(model.njnt)
+        }
+        missing = [name for name in self.dex_joint_names if name not in name_to_qposadr]
+        if missing:
+            raise RuntimeError(
+                "Dex hand joints are missing from the robot model, so qpos cannot "
+                f"carry the hand pose: {missing}. Add these joints to the MJCF "
+                "or drop dex_hand_config from the IK config."
+            )
+        return np.asarray(
+            [name_to_qposadr[name] for name in self.dex_joint_names], dtype=np.int64
+        )
 
     @property
     def gmr(self):
@@ -125,7 +155,7 @@ class RobotRetargeter:
         qpos = self.gmr_retargeter.retarget(human_data)
 
         if self.use_dex:
-            if self.dex_retargeter is None:
+            if self.dex_retargeter is None or self.dex_qpos_indices is None:
                 raise RuntimeError("Dex backend is enabled but was not initialized")
             arm_action = qpos[self.qpos_indices]
             dex_values = self.dex_retargeter.retarget(
@@ -136,6 +166,9 @@ class RobotRetargeter:
             hand_action = np.array(
                 [dex_values[name] for name in self.dex_joint_names], dtype=np.float64
             )
+            # Fold the dex hand joints into qpos so the saved qpos is the complete
+            # robot pose (hands included), not just GMR's body/arm IK result.
+            qpos[self.dex_qpos_indices] = hand_action
             action = np.concatenate([arm_action, hand_action]).astype(
                 np.float32, copy=False
             )

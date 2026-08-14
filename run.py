@@ -7,4 +7,5 @@
     depth/.venv/bin/python -m depth.cli --command video --video.frames-json outputs/0/process/frames.json --video.vis
 03: inpaint
 04: retarget
+    retarget/.venv/bin/python -m retarget --input inputs/0.hdf5 --ik-config configs/egodex_g1_inspire_dfq.json --frames-json outputs/0/process/frames.json --vis
 """

@@ -1,7 +1,6 @@
 """Import/smoke tests for the retarget package."""
 
 import importlib
-from pathlib import Path
 
 import numpy as np
 
@@ -9,17 +8,8 @@ import numpy as np
 def test_package_imports() -> None:
     import retarget
     from retarget import (
-        DexHandRetargeter,
-        GMRRetargeter,
         GMR_SRC_HUMAN,
         GMR_TGT_ROBOT,
-        RetargetResult,
-        RobotRetargeter,
-        build_dex_retargeter,
-        build_gmr_retargeter,
-        load_ik_config,
-        merge_gmr_hand_points,
-        required_gmr_hand_points,
     )
 
     assert GMR_SRC_HUMAN == "ego2robo_human"

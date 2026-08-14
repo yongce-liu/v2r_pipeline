@@ -32,7 +32,7 @@ from loguru import logger
 
 from inpaint import __version__
 from inpaint.frames import FrameManifest, load_frame_manifest
-from inpaint.masks import MaskEntry, load_mask_manifest
+from inpaint.masks import load_mask_manifest
 from inpaint.media import (
     apply_mask_overlay,
     load_mask,
@@ -209,6 +209,7 @@ def _config_dict(args: InpaintVideoArgs, manifest: FrameManifest) -> dict:
             "base_model_path": base_model_path,
             "device": args.qwen.device,
             "cpu_offload": args.qwen.cpu_offload,
+            "downsample": args.qwen.downsample,
             "prompt": args.qwen.prompt,
             "negative_prompt": args.qwen.negative_prompt,
             "steps": args.qwen.steps,

@@ -27,7 +27,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-import torch
 import tyro
 from loguru import logger
 

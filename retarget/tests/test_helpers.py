@@ -3,8 +3,6 @@
 import numpy as np
 
 from retarget import (
-    GMR_SRC_HUMAN,
-    GMR_TGT_ROBOT,
     load_ik_config,
     merge_gmr_hand_points,
     required_gmr_hand_points,
