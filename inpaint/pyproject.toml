@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "inpaint"
 version = "0.1.0"
-description = "Qwen-Image-Edit hand/arm removal inpainting for EgoDataPipe segment outputs"
+description = "Hand/arm removal inpainting for EgoDataPipe segment outputs (Qwen-Image-Edit and LaMa backends)"
 readme = "README.md"
 requires-python = ">=3.10,<3.11"
 dependencies = [
@@ -22,13 +22,20 @@ dependencies = [
   "transformers>=4.40.0,<5.0.0",
   "accelerate>=0.28.0",
   "huggingface-hub",
+  # Third-party TorchScript big-lama wrapper (the LaMa backend). Its
+  # pillow<10 requirement is overridden in [tool.uv] to keep pillow>=10.
+  "simple-lama-inpainting==0.1.2",
 ]
 
 [project.scripts]
 inpaint = "inpaint.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=8.0.0", "ruff", "uv"]
+dev = [
+  "pytest>=8.0.0",
+  "ruff",
+  "uv",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["inpaint"]
@@ -39,6 +46,9 @@ packages = ["inpaint"]
 [tool.uv]
 required-version = ">=0.11.3"
 index-strategy = "unsafe-best-match"
+# simple-lama-inpainting pins pillow>=9.5,<10.0.0, which contradicts the
+# project's pillow>=10.0.0; force pillow up so both can coexist.
+override-dependencies = ["pillow>=10.0.0"]
 
 [tool.uv.sources]
 torch = { index = "pytorch-cu128" }
@@ -55,6 +65,6 @@ python_files = ["test_*.py"]
 pythonpath = ["."]
 
 [tool.ruff]
-exclude = ["pkgs", ".venv", "build", "dist"]
+exclude = ["pkgs", ".venv", "build", "dist", "inpaint/lama_inpaint/_lama"]
 line-length = 88
 lint.extend-ignore = ["E203", "E266", "E501"]

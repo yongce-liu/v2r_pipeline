@@ -10,7 +10,7 @@ import torch
 from loguru import logger
 
 from inpaint.device import resolve_torch_device, set_cuda_device_if_indexed
-from inpaint.qwen_model import QwenEditModelLoader
+from inpaint.qwen.model import QwenEditModelLoader
 
 DEFAULT_INPAINT_PROMPT = "Discard and remove the hand and arms according to the colored masks of this image, keep the other part the same."
 DEFAULT_INPAINT_NEGATIVE_PROMPT = (
@@ -22,11 +22,11 @@ DEFAULT_INPAINT_NEGATIVE_PROMPT = (
 class QwenInpaintArgs:
     """Arguments for Qwen image editing on a masked frame."""
 
-    model_path: Path = Path(__file__).parents[2] / "ckpts/Qwen-Image-Edit-2511-NVFP4"
+    model_path: Path | None = None
     """Qwen model: a diffusers directory (``model_index.json``) or a single-file
     ``.safetensors`` checkpoint (ComfyUI NVFP4). None disables inpainting."""
 
-    base_model_path: Path = Path(__file__).parents[2] / "ckpts/Qwen-Image-Edit-2511"
+    base_model_path: Path | None = None
     """Diffusers base model used with a single-file checkpoint. The single file
     only carries the quantized transformer; the VAE / text encoder / scheduler /
     tokenizer come from this base. Defaults to ``ckpts/Qwen-Image-Edit-2511``."""
@@ -74,44 +74,31 @@ class QwenInpainter:
 
     @staticmethod
     def _downsample_image(image, ratio: float):
-        """Resize an accepted pipeline image and align dimensions to 16 pixels."""
+        """Convert an accepted pipeline image to PIL and align it to 16 pixels.
+
+        The Qwen-Image-Edit pipeline reads ``image.size`` as a PIL attribute (and
+        ``ndarray.size``/``Tensor.size`` are not the pixel-size tuple), so the image
+        must be converted to PIL before it reaches the pipeline.
+        """
         from PIL import Image
 
-        if isinstance(image, Image.Image):
-            width, height = image.size
-        elif isinstance(image, torch.Tensor):
-            height, width = image.shape[-2:]
-        else:
-            height, width = image.shape[-3:-1]
+        if isinstance(image, torch.Tensor):
+            image = Image.fromarray(
+                image.permute(1, 2, 0).to("cpu", torch.uint8).contiguous().numpy()
+            )
+        elif not isinstance(image, Image.Image):
+            image = Image.fromarray(image)
 
+        width, height = image.size
         if ratio == 1.0:
             target_width = max(16, width // 16 * 16)
             target_height = max(16, height // 16 * 16)
-            resized = image
-        elif isinstance(image, Image.Image):
-            target_width = max(16, round(width * ratio / 16) * 16)
-            target_height = max(16, round(height * ratio / 16) * 16)
-            resized = image.resize(
-                (target_width, target_height),
-                resample=Image.Resampling.LANCZOS,
-            )
-        elif isinstance(image, torch.Tensor):
-            target_width = max(16, round(width * ratio / 16) * 16)
-            target_height = max(16, round(height * ratio / 16) * 16)
-            source_dtype = image.dtype
-            resized = torch.nn.functional.interpolate(
-                image.unsqueeze(0).float(),
-                size=(target_height, target_width),
-                mode="bilinear",
-                align_corners=False,
-            ).squeeze(0)
-            if not source_dtype.is_floating_point:
-                resized = resized.round().clamp(0, 255)
-            resized = resized.to(source_dtype)
         else:
             target_width = max(16, round(width * ratio / 16) * 16)
             target_height = max(16, round(height * ratio / 16) * 16)
-            resized = Image.fromarray(image).resize(
+
+        if (target_width, target_height) != (width, height):
+            image = image.resize(
                 (target_width, target_height),
                 resample=Image.Resampling.LANCZOS,
             )
@@ -123,7 +110,7 @@ class QwenInpainter:
             target_height,
             ratio,
         )
-        return resized, target_height, target_width
+        return image, target_height, target_width
 
     def inpaint(
         self,

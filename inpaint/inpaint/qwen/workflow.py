@@ -40,7 +40,7 @@ from inpaint.media import (
     save_image,
     save_side_by_side,
 )
-from inpaint.qwen_inpaint import QwenInpaintArgs, QwenInpainter
+from inpaint.qwen.inpainter import QwenInpaintArgs, QwenInpainter
 
 INPAINT_FILENAME_PATTERN = "inpainted_{:06d}.png"
 VIS_FILENAME_PATTERN = "vis_{:06d}.png"

@@ -1,32 +1,40 @@
 # inpaint
 
-Qwen-Image-Edit arm-removal inpainting for `v2r_pipeline`, run per frame and
-reading the `segment` stage's `masks.json` (which references the `process`
-stage's frame manifest). For every frame the SAM3 hand/arm mask is painted over
-the frame with a solid color, Qwen-Image-Edit removes the hand/arm and
-completes the background, and the result is written to `outputs/<clip>/inpaint/`.
+Hand/arm-removal inpainting for `v2r_pipeline`, run per frame and reading the
+`segment` stage's `masks.json` (which references the `process` stage's frame
+manifest). Two backends are available:
+
+- **Qwen-Image-Edit** (default): the SAM3 hand/arm mask is painted over the
+  frame with a solid color, Qwen-Image-Edit removes the hand/arm and completes
+  the background; results go to `outputs/<clip>/inpaint/`.
+- **LaMa** (`big-lama` FFC generator): a lightweight CNN alternative, taking
+  the clean frame + real mask; results go to `outputs/<clip>/lama/`. See the
+  "LaMa backend" section below.
 
 ## Install
 
 ```bash
-cd 02_inpaint
+cd inpaint
 uv sync
 ```
 
 ## Usage
 
-Whole video (frame-by-frame, reading the `segment` stage output):
+The CLI is two axes: `--command single|video` (one masked frame or every masked
+frame of a video) and `--backend qwen|lama` (which inpainting backend).
+
+Whole video with Qwen (frame-by-frame, reading the `segment` stage output):
 
 ```bash
-uv run python -m inpaint.cli --command video \
-  --video.masks-json outputs/0/segment/masks.json \
-  --video.vis --video.qwen.model-path ckpts/Qwen-Image-Edit-2511
+uv run python -m inpaint.cli --command video --backend qwen \
+  --video-qwen.masks-json outputs/0/segment/masks.json \
+  --video-qwen.vis --video-qwen.qwen.model-path ckpts/Qwen-Image-Edit-2511
 ```
 
-Single masked frame (image already painted with the mask color):
+Single masked frame with Qwen (image already painted with the mask color):
 
 ```bash
-uv run python -m inpaint.cli --command single \
+uv run python -m inpaint.cli --command single --backend qwen \
   --single.image-path frame.png --single.output-path out.png \
   --single.qwen.model-path ckpts/Qwen-Image-Edit-2511
 ```
@@ -35,7 +43,7 @@ RTX 5090 NVFP4, reducing a 1920x1080 input to 1280x720 and using the release
 benchmark settings:
 
 ```bash
-uv run python -m inpaint.cli --command single \
+uv run python -m inpaint.cli --command single --backend qwen \
   --single.image-path outputs/0/process/frames/frame_000000.png \
   --single.output-path outputs/0/inpaint_nvfp4_720p_test.png \
   --single.qwen.model-path \
@@ -121,13 +129,88 @@ attempting to open the missing BF16 transformer shards.
 - `--video.qwen.seed <int>` — random seed (default `42`).
 - `--video.qwen.overwrite` / `--video.qwen.no-overwrite` — recompute vs. reuse outputs (default recompute).
 
+## LaMa backend (`lama-inpaint`)
+
+An alternative inpainting backend using the official **big-lama** FFC generator
+(from [advimman/lama](https://github.com/advimman/lama), Apache-2.0). It is a
+lightweight CNN (≈51M params) compared to Qwen-Image-Edit, runs in seconds per
+frame, and is useful for quick tests / A/B comparison of hand/arm removal.
+
+It drives the third-party
+[`simple-lama-inpainting`](https://github.com/enesmsahin/simple-lama-inpainting)
+package, which ships the FFC network as a single TorchScript file (so no
+hand-maintained network code is vendored). Its `pillow<10` requirement is
+forced up to the project's `pillow>=10` via a uv override.
+
+### Checkpoint
+
+The model is a single TorchScript file (`big-lama.pt`, ≈200 MB). Prefer a
+**local** copy for offline runs (cloud servers without internet):
+
+```bash
+cp ~/.cache/torch/hub/checkpoints/big-lama.pt ckpts/big-lama/big-lama.pt
+```
+
+and pass `--single.lama.model-path` / `--video-lama.lama.model-path`
+`ckpts/big-lama/big-lama.pt` (the adapter loads it via the `LAMA_MODEL` env var,
+so no network is touched). Without `--lama.model-path`, the package
+auto-downloads from the author's GitHub release on first use.
+
+### Usage
+
+The input contract differs from Qwen: the **image must be the clean frame** and
+the **mask a 1-channel binary image where nonzero (255) pixels are inpainted**.
+LaMa zeroes the hole itself, so a painted input would lose the original
+background — the CLI enforces `--single.mask-path`.
+
+The mask is **morphologically dilated** before inpainting so LaMa erases the
+faint original-edge halo that a tight segment mask leaves. The outward expansion
+is area-aware (≈`dilate_px` at a mid-size hand of ~1e6 px, scaling sub-linearly
+with mask area); `--single.lama.dilate-px 0` disables it.
+
+Whole video (frame-by-frame, reading the `segment` stage output):
+
+```bash
+cd inpaint && uv run python -m inpaint.cli --command video --backend lama \
+    --video-lama.masks-json ../outputs/0/segment/masks.json \
+    --video-lama.vis --video-lama.lama.model-path ../ckpts/big-lama/big-lama.pt
+```
+
+Writes to `outputs/<clip>/lama/` (`lama/`, `lama_vis/`, `lama.json`, `config.json`),
+mirroring the Qwen layout but keeping the two backends' outputs separate.
+
+Single masked frame:
+
+```bash
+uv run python -m inpaint.cli --command single --backend lama \
+    --single.image-path frame.png --single.output-path out.png \
+    --single.mask-path mask.png \
+    --single.lama.model-path ckpts/big-lama/big-lama.pt
+```
+
+### Options
+
+- `--single.lama.model-path <path>` / `--video-lama.lama.model-path <path>` —
+  local TorchScript `big-lama.pt` (offline-friendly).
+- `--<scope>.lama.device auto|cuda[:N]|cpu` — torch device (default `auto`).
+- `--<scope>.lama.dilate-px <N>` — outward mask dilation in pixels (default
+  `40`, area-adaptive); `0` disables.
+- `--<scope>.lama.overwrite` / `--<scope>.lama.no-overwrite` — recompute vs.
+  reuse outputs (scope = `single` or `video-lama`).
+
+### Notes
+
+- LaMa is trained on 256×256 images and generalizes to higher resolutions, but
+  its fill of large holes is more conservative than Qwen's diffusion output. It
+  is best used for fast iteration / comparison, not as a drop-in quality match.
+
 ## Notes on the NVFP4 checkpoint
 
 `ckpts/Qwen-Image-Edit-2511-NVFP4` ships a single
 `qwen_image_edit_2511_nvfp4.safetensors` (≈19.8 GB) — a ComfyUI state dict of
 the `Qwen-Image-Edit-2511` transformer with NVFP4-quantized weights. It is not a
 diffusers directory (no `model_index.json` / tokenizer / VAE), so it cannot be
-passed to `from_pretrained` on its own. The loader in `qwen_model.py` maps its
+passed to `from_pretrained` on its own. The loader in `qwen/model.py` maps its
 `transformer_blocks.*` keys onto the diffusers `QwenImageTransformer2DModel`
 layout. NVFP4 weights remain packed `uint8`; block scales remain FP8 and are
 consumed directly by comfy-kitchen.

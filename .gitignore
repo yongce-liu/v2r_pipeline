@@ -3,6 +3,8 @@ inputs
 outputs
 assets
 envs
+tmp
+.vscode
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from inpaint.workflow import InpaintVideoArgs, run_video_inpaint
+from inpaint.qwen.workflow import InpaintVideoArgs, run_video_inpaint
 from tests.test_frames import build_process_layout
 from tests.test_masks import build_segment_layout
 
@@ -128,7 +128,7 @@ def test_run_video_inpaint_max_frames(tmp_path: Path) -> None:
 def test_run_video_inpaint_idempotent_skip(tmp_path: Path) -> None:
     """A non-overwrite re-run reuses prior per-frame outputs (no re-inference)."""
 
-    from inpaint.qwen_inpaint import QwenInpaintArgs
+    from inpaint.qwen.inpainter import QwenInpaintArgs
 
     masks_json, _ = _build_segmented_clip(tmp_path, frame_count=3)
     run_video_inpaint(
