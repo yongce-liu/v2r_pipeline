@@ -1,0 +1,60 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "depth"
+version = "0.1.0"
+description = "Depth Anything 3 depth estimation (single image or whole video)"
+readme = "README.md"
+requires-python = ">=3.10,<3.11"
+dependencies = [
+  "numpy==1.26.4",
+  "opencv-python>=4.8.0",
+  "pillow>=10.0.0",
+  "tyro>=1.0.13",
+  "loguru>=0.7.3",
+  "scipy>=1.10.0",
+  "pyrender>=0.1.45",
+  "PyOpenGL>=3.1.0",
+  "torch==2.10.0+cu128",
+  "torchvision==0.25.0+cu128",
+  "depth-anything-3",
+]
+
+[project.scripts]
+depth = "depth.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8.0.0", "ruff", "uv"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["depth"]
+
+[tool.hatch.build.targets.sdist]
+packages = ["depth"]
+
+[tool.uv]
+required-version = ">=0.11.3"
+index-strategy = "unsafe-best-match"
+
+[tool.uv.sources]
+depth-anything-3 = { git = "https://github.com/ByteDance-Seed/Depth-Anything-3.git", rev = "main" }
+gsplat = {git = "https://github.com/nerfstudio-project/gsplat.git", rev = "main"}
+torch = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+pythonpath = ["."]
+
+[tool.ruff]
+exclude = ["pkgs", ".venv", "build", "dist"]
+line-length = 88
+lint.extend-ignore = ["E203", "E266", "E501"]

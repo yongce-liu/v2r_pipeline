@@ -1,4 +1,8 @@
 ckpts
+inputs
+outputs
+assets
+envs
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -218,3 +222,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local uv overrides (test-only; git install is the committed form)
+uv.override.toml

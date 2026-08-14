@@ -1,0 +1,59 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "inpaint"
+version = "0.1.0"
+description = "Qwen-Image-Edit hand/arm removal inpainting for EgoDataPipe segment outputs"
+readme = "README.md"
+requires-python = ">=3.10,<3.11"
+dependencies = [
+  "numpy==1.26.4",
+  "opencv-python>=4.8.0",
+  "pillow>=10.0.0",
+  "tyro>=1.0.13",
+  "loguru>=0.7.3",
+  "safetensors>=0.4.0",
+  "diffusers>=0.36.0",
+  "torch==2.10.0+cu128",
+  "torchvision==0.25.0+cu128",
+  "transformers>=4.40.0,<5.0.0",
+  "accelerate>=0.28.0",
+  "huggingface-hub",
+]
+
+[project.scripts]
+inpaint = "inpaint.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8.0.0", "ruff", "uv"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["inpaint"]
+
+[tool.hatch.build.targets.sdist]
+packages = ["inpaint"]
+
+[tool.uv]
+required-version = ">=0.11.3"
+index-strategy = "unsafe-best-match"
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+pythonpath = ["."]
+
+[tool.ruff]
+exclude = ["pkgs", ".venv", "build", "dist"]
+line-length = 88
+lint.extend-ignore = ["E203", "E266", "E501"]

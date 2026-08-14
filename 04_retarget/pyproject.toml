@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "retarget"
+version = "0.1.0"
+description = "Dataset-agnostic human pose to robot joint retargeting"
+requires-python = ">=3.12,<3.13"
+
+dependencies = [
+    "dex-retargeting>=0.5.0",
+    "general-motion-retargeting @ git+https://github.com/YanjieZe/GMR.git@bb1bbe40774794fceb2a7c579a3464a28e68c844",
+    "numpy",
+    "loguru>=0.7.3",
+    "tyro>=1.0.15",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["retarget"]
+
+[project.scripts]
+retarget = "retarget.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
