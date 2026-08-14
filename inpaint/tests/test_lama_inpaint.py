@@ -35,7 +35,11 @@ class FakeLamaInpainter:
     def inpaint(self, image, output_path: Path, args, mask=None) -> None:
         self.calls.append(len(self.calls))
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        rgb = image.permute(1, 2, 0).numpy() if isinstance(image, torch.Tensor) else np.asarray(image)
+        rgb = (
+            image.permute(1, 2, 0).numpy()
+            if isinstance(image, torch.Tensor)
+            else np.asarray(image)
+        )
         out = rgb.copy()
         if mask is not None:
             mb = np.asarray(mask) > 0
@@ -138,25 +142,25 @@ def test_lama_video_workflow(tmp_path: Path) -> None:
         inpainter=fake,
     )
 
-    assert outputs.stage_dir == tmp_path / "0" / "lama"
-    assert outputs.lama_dir.exists()
-    assert outputs.lama_vis_dir is not None and outputs.lama_vis_dir.exists()
+    assert outputs.stage_dir == tmp_path / "0" / "inpaint"
+    assert outputs.inpainted_dir.exists()
+    assert outputs.inpainted_vis_dir is not None and outputs.inpainted_vis_dir.exists()
 
-    lama = sorted(p.name for p in outputs.lama_dir.glob("lama_*.png"))
-    vis = sorted(p.name for p in outputs.lama_vis_dir.glob("vis_*.png"))
-    assert lama == ["lama_000000.png", "lama_000001.png", "lama_000002.png"]
-    assert vis == ["vis_000000.png", "vis_000001.png", "vis_000002.png"]
+    inpainted = sorted(p.name for p in outputs.inpainted_dir.glob("*.png"))
+    vis = sorted(p.name for p in outputs.inpainted_vis_dir.glob("*.png"))
+    assert inpainted == ["000000.png", "000001.png", "000002.png"]
+    assert vis == ["000000.png", "000001.png", "000002.png"]
 
-    manifest = json.loads(outputs.lama_json_path.read_text(encoding="utf-8"))
+    manifest = json.loads(outputs.inpainted_json_path.read_text(encoding="utf-8"))
     assert manifest["backend"] == "lama"
     assert manifest["masked_count"] == 2  # frame 2 has no mask
     # frames without a mask are copied through
-    assert outputs.lama_dir.joinpath("lama_000002.png").exists()
+    assert outputs.inpainted_dir.joinpath("000002.png").exists()
 
     config = json.loads(outputs.config_json_path.read_text(encoding="utf-8"))
     assert config["backend"] == "lama"
     assert config["inpaint"]["backend"] == "simple"
-    assert config["package"]["name"] == "inpaint.lama_inpaint"
+    assert config["package"]["name"] == "inpaint.lama"
 
 
 def test_simple_lama_inpainter_overwrite_skip(tmp_path: Path) -> None:
@@ -175,13 +179,21 @@ def test_simple_lama_inpainter_overwrite_skip(tmp_path: Path) -> None:
 def test_dilation_px_scales_with_area() -> None:
     """The outward dilation grows with mask area, sub-linearly (sqrt)."""
 
-    assert SimpleLamaInpainter._dilation_px_for_area(area_px=1_000_000, dilate_px=40) == 40
-    assert SimpleLamaInpainter._dilation_px_for_area(area_px=4_000_000, dilate_px=40) == 80
+    assert (
+        SimpleLamaInpainter._dilation_px_for_area(area_px=1_000_000, dilate_px=40) == 40
+    )
+    assert (
+        SimpleLamaInpainter._dilation_px_for_area(area_px=4_000_000, dilate_px=40) == 80
+    )
     # smaller mask -> smaller dilation (but at least 1)
-    assert SimpleLamaInpainter._dilation_px_for_area(area_px=250_000, dilate_px=40) == 20
+    assert (
+        SimpleLamaInpainter._dilation_px_for_area(area_px=250_000, dilate_px=40) == 20
+    )
     # zero-area or disabled -> 0
     assert SimpleLamaInpainter._dilation_px_for_area(area_px=0, dilate_px=40) == 0
-    assert SimpleLamaInpainter._dilation_px_for_area(area_px=1_000_000, dilate_px=0) == 0
+    assert (
+        SimpleLamaInpainter._dilation_px_for_area(area_px=1_000_000, dilate_px=0) == 0
+    )
 
 
 def test_dilate_mask_expands_outward() -> None:

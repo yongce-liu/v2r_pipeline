@@ -165,6 +165,7 @@ def refine_iou(
     ``render_fn(T)`` returns a boolean arm-silhouette mask at the same resolution
     as ``mask``. Uses Nelder-Mead on the 6-DoF camera pose seeded from ``T``.
     """
+
     def cost(p: np.ndarray) -> float:
         t = _T_from_params(p)
         arm = render_fn(t)

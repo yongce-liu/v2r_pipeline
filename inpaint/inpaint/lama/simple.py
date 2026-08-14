@@ -141,7 +141,9 @@ class SimpleLamaInpainter:
         area = int(binary.sum() / 255)
         k = SimpleLamaInpainter._dilation_px_for_area(area, args.dilate_px)
         if k > 0:
-            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * k + 1, 2 * k + 1))
+            kernel = cv2.getStructuringElement(
+                cv2.MORPH_ELLIPSE, (2 * k + 1, 2 * k + 1)
+            )
             binary = cv2.dilate(binary, kernel, iterations=1)
         logger.info(
             "[simple-lama] mask dilation: area={}px -> {}px",
@@ -166,7 +168,9 @@ class SimpleLamaInpainter:
             elif tensor.ndim == 4:
                 arr = tensor[0].permute(1, 2, 0).contiguous().cpu().numpy()
             else:
-                raise ValueError(f"Expected a 3-channel image, got {tuple(tensor.shape)}")
+                raise ValueError(
+                    f"Expected a 3-channel image, got {tuple(tensor.shape)}"
+                )
         else:
             arr = np.asarray(image)
 

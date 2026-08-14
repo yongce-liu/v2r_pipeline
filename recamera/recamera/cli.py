@@ -15,7 +15,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-import mujoco as mj
 
 from recamera.inputs import load_episode
 from recamera.robot import build_model
@@ -76,8 +75,10 @@ def main(args: RecameraArgs | None = None) -> None:
         cloud_stride=args.cloud_stride,
         iou_render_width=args.iou_render_width,
     )
-    print(f"recamera: {ep.frame_count} frames, {ep.width}x{ep.height}, "
-          f"{ep.fps:.0f} fps -> {output_dir}")
+    print(
+        f"recamera: {ep.frame_count} frames, {ep.width}x{ep.height}, "
+        f"{ep.fps:.0f} fps -> {output_dir}"
+    )
     n = process_episode(model, ep, output_dir, cfg)
     print(f"Wrote {n} transparent frame(s) to {output_dir / 'frames'}")
 

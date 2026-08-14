@@ -29,21 +29,36 @@ CAMERA_NAME = "__fp__"
 # visible in the transparent first-person output). Finger links use the L_/R_
 # prefix scheme of the G1 Inspire hand.
 ARM_PREFIXES = (
-    "left_shoulder", "left_elbow", "left_wrist",
-    "right_shoulder", "right_elbow", "right_wrist",
-    "L_", "R_",
+    "left_shoulder",
+    "left_elbow",
+    "left_wrist",
+    "right_shoulder",
+    "right_elbow",
+    "right_wrist",
+    "L_",
+    "R_",
 )
 
 # Skeleton anchor joints used for depth matching. The arm links give the elbow/
 # wrist depth alignment (the user's chosen match target); the finger links keep
 # the hand (which the human mask contains) from drifting.
 SKELETON_ANCHORS = (
-    "left_shoulder_yaw_link", "left_elbow_link", "left_wrist_yaw_link",
-    "L_thumb_distal", "L_index_intermediate", "L_middle_intermediate",
-    "L_ring_intermediate", "L_pinky_intermediate",
-    "right_shoulder_yaw_link", "right_elbow_link", "right_wrist_yaw_link",
-    "R_thumb_distal", "R_index_intermediate", "R_middle_intermediate",
-    "R_ring_intermediate", "R_pinky_intermediate",
+    "left_shoulder_yaw_link",
+    "left_elbow_link",
+    "left_wrist_yaw_link",
+    "L_thumb_distal",
+    "L_index_intermediate",
+    "L_middle_intermediate",
+    "L_ring_intermediate",
+    "L_pinky_intermediate",
+    "right_shoulder_yaw_link",
+    "right_elbow_link",
+    "right_wrist_yaw_link",
+    "R_thumb_distal",
+    "R_index_intermediate",
+    "R_middle_intermediate",
+    "R_ring_intermediate",
+    "R_pinky_intermediate",
 )
 
 

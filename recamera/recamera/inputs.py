@@ -74,15 +74,19 @@ def load_episode(output_root: Path, stem: str) -> EpisodeInputs:
     intrinsics = np.empty((n, 3, 3), dtype=np.float64)
 
     for i, entry in enumerate(depth_entries):
-        masks[i] = np.asarray(
-            Image.open(mask_dir / entry["frame_filename"].replace("frame", "mask"))
-        ) > 0
+        masks[i] = (
+            np.asarray(
+                Image.open(mask_dir / entry["frame_filename"].replace("frame", "mask"))
+            )
+            > 0
+        )
         depths[i] = np.load(depths_dir / entry["depth_filename"])
         intrinsics[i] = np.asarray(entry["intrinsics"], dtype=np.float64)
 
     timestamps = np.asarray(
         [
-            float(e.get("timestamp_sec", i)) if e.get("timestamp_sec") is not None
+            float(e.get("timestamp_sec", i))
+            if e.get("timestamp_sec") is not None
             else float(i)
             for i, e in enumerate(frames_json["entries"])
         ],

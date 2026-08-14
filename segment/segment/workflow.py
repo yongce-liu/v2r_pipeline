@@ -13,10 +13,10 @@ Output layout mirrors the ``process`` stage:
     ├── config.json     # effective run config (same style as process)
     ├── masks.json      # per-frame mask manifest (index / paths / bbox / area)
     ├── masks/
-    │   ├── mask_000000.png
+    │   ├── 000000.png
     │   └── ...
     └── masks_vis/      # only when vis=True
-        ├── vis_000000.jpg
+        ├── 000000.jpg
         └── ...
 """
 
@@ -40,8 +40,8 @@ from segment.media import (
 )
 from segment.sam_mask import Sam3MaskGenerator, SamMaskArgs
 
-MASK_FILENAME_PATTERN = "mask_{:06d}.png"
-VIS_FILENAME_PATTERN = "vis_{:06d}.jpg"
+MASK_FILENAME_PATTERN = "{:06d}.png"
+VIS_FILENAME_PATTERN = "{:06d}.jpg"
 
 
 @dataclass

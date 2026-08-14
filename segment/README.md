@@ -45,10 +45,10 @@ outputs/0/segment/
 ├── config.json      # effective run config (same style as process)
 ├── masks.json       # per-frame mask manifest (index / paths / bbox / area)
 ├── masks/
-│   ├── mask_000000.png
+│   ├── 000000.png
 │   └── ...
 └── masks_vis/       # only when --video.vis is on
-    ├── vis_000000.jpg
+    ├── 000000.jpg
     └── ...
 ```
 

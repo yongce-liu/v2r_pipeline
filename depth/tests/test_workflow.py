@@ -32,7 +32,7 @@ class FakePredictor:
         h, w = FRAME_SHAPE
         # Vary the depth per frame so per-frame arrays and the aggregate
         # clearly differ across frames.
-        frame_no = int(image_path.name.split("_")[1].split(".")[0])
+        frame_no = int(image_path.stem)
         depth = np.full((h, w), frame_no, dtype=np.float32)
         intrinsics = np.array(
             [[w, 0.0, w / 2], [0.0, w, h / 2], [0.0, 0.0, 1.0]],
@@ -64,10 +64,10 @@ def test_run_video_depth_with_vis_npz(tmp_path: Path) -> None:
     assert outputs.depths_dir.exists()
     assert outputs.depths_vis_dir is not None and outputs.depths_vis_dir.exists()
 
-    depths = sorted(p.name for p in outputs.depths_dir.glob("depth_*.npy"))
-    vis = sorted(p.name for p in outputs.depths_vis_dir.glob("vis_*.png"))
-    assert depths == ["depth_000000.npy", "depth_000001.npy", "depth_000002.npy"]
-    assert vis == ["vis_000000.png", "vis_000001.png", "vis_000002.png"]
+    depths = sorted(p.name for p in outputs.depths_dir.glob("*.npy"))
+    vis = sorted(p.name for p in outputs.depths_vis_dir.glob("*.png"))
+    assert depths == ["000000.npy", "000001.npy", "000002.npy"]
+    assert vis == ["000000.png", "000001.png", "000002.png"]
 
     manifest = json.loads(outputs.depth_json_path.read_text(encoding="utf-8"))
     assert manifest["frame_count"] == 3
@@ -79,9 +79,9 @@ def test_run_video_depth_with_vis_npz(tmp_path: Path) -> None:
 
     entry = manifest["entries"][0]
     assert entry["index"] == 0
-    assert entry["frame_filename"] == "frame_000000.png"
-    assert entry["depth_filename"] == "depth_000000.npy"
-    assert entry["vis_filename"] == "vis_000000.png"
+    assert entry["frame_filename"] == "000000.png"
+    assert entry["depth_filename"] == "000000.npy"
+    assert entry["vis_filename"] == "000000.png"
     assert entry["height"] == 8
     assert entry["width"] == 10
     assert entry["depth_min"] == 0.0
@@ -134,7 +134,7 @@ def test_run_video_depth_without_vis_pkl(tmp_path: Path) -> None:
     assert data["depth"].shape == (2, 8, 10)
     assert data["intrinsics"].shape == (2, 3, 3)
     assert data["timestamps"].shape == (2,)
-    assert data["frames"] == ["frame_000000.png", "frame_000001.png"]
+    assert data["frames"] == ["000000.png", "000001.png"]
 
 
 def test_run_video_depth_json_aggregate(tmp_path: Path) -> None:
@@ -149,7 +149,7 @@ def test_run_video_depth_json_aggregate(tmp_path: Path) -> None:
     payload = json.loads(outputs.aggregate_path.read_text(encoding="utf-8"))
     assert payload["encoding"] == "base64-gzip-npy"
     assert payload["frame_count"] == 2
-    assert payload["frames"] == ["frame_000000.png", "frame_000001.png"]
+    assert payload["frames"] == ["000000.png", "000001.png"]
 
     raw = base64.b64decode(payload["depth"])
     depth = np.load(io.BytesIO(gzip.decompress(raw)), allow_pickle=False)
@@ -198,8 +198,8 @@ def test_run_video_depth_idempotent_skip(tmp_path: Path) -> None:
     )
     assert second.depth_json_path.exists()
     assert len(second.entries) == 3
-    # depth_000000.npy came from the first run; no re-inference happened.
-    first_depth = np.load(second.depths_dir / "depth_000000.npy")
+    # 000000.npy came from the first run; no re-inference happened.
+    first_depth = np.load(second.depths_dir / "000000.npy")
     assert first_depth[0, 0] == pytest.approx(0.0)
     assert second.depths_dir.glob("depth_*.npy")
 

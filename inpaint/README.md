@@ -27,8 +27,8 @@ Whole video with Qwen (frame-by-frame, reading the `segment` stage output):
 
 ```bash
 uv run python -m inpaint.cli --command video --backend qwen \
-  --video-qwen.masks-json outputs/0/segment/masks.json \
-  --video-qwen.vis --video-qwen.qwen.model-path ckpts/Qwen-Image-Edit-2511
+  --video.masks-json outputs/0/segment/masks.json \
+  --video.vis --video.qwen.model-path ckpts/Qwen-Image-Edit-2511
 ```
 
 Single masked frame with Qwen (image already painted with the mask color):
@@ -44,7 +44,7 @@ benchmark settings:
 
 ```bash
 uv run python -m inpaint.cli --command single --backend qwen \
-  --single.image-path outputs/0/process/frames/frame_000000.png \
+  --single.image-path outputs/0/process/frames/000000.png \
   --single.output-path outputs/0/inpaint_nvfp4_720p_test.png \
   --single.qwen.model-path \
     ckpts/Qwen-Image-Edit-2511-NVFP4/qwen_image_edit_2511_nvfp4.safetensors \
@@ -58,9 +58,9 @@ For `outputs/0/segment/masks.json` this creates, mirroring the earlier stages:
 ```
 outputs/0/inpaint/
 ├── config.json     # effective run config (same style as process)
-├── inpainted.json  # per-frame inpaint manifest (index / paths / prompt)
-├── inpainted/      # edited frames (inpainted_000000.png, ...)
-└── inpainted_vis/  # original + edited side-by-side (vis_000000.png, ...), only when vis=True
+├── inpainted.json  # per-frame inpaint manifest (index / paths / prompt / backend)
+├── inpainted/      # edited frames (000000.png, ...)
+└── inpainted_vis/  # original + edited side-by-side (000000.png, ...), only when vis=True
 ```
 
 Frames whose mask is empty (no hand/arm detected) are copied through unchanged,
@@ -151,7 +151,7 @@ The model is a single TorchScript file (`big-lama.pt`, ≈200 MB). Prefer a
 cp ~/.cache/torch/hub/checkpoints/big-lama.pt ckpts/big-lama/big-lama.pt
 ```
 
-and pass `--single.lama.model-path` / `--video-lama.lama.model-path`
+and pass `--single.lama.model-path` / `--video.lama.model-path`
 `ckpts/big-lama/big-lama.pt` (the adapter loads it via the `LAMA_MODEL` env var,
 so no network is touched). Without `--lama.model-path`, the package
 auto-downloads from the author's GitHub release on first use.
@@ -168,16 +168,24 @@ faint original-edge halo that a tight segment mask leaves. The outward expansion
 is area-aware (≈`dilate_px` at a mid-size hand of ~1e6 px, scaling sub-linearly
 with mask area); `--single.lama.dilate-px 0` disables it.
 
+**The output does not differ by backend.** Both Qwen and LaMa write to the same
+`outputs/<clip>/inpaint/` layout with pure-index frame names:
+
+```
+outputs/<clip>/inpaint/
+├── config.json     # effective run config (backend recorded in "inpaint")
+├── inpainted.json  # per-frame inpaint manifest (index / paths / backend)
+├── inpainted/      # edited frames (000000.png, ...)
+└── inpainted_vis/  # original + edited side-by-side (000000.png, ...), only when vis=True
+```
+
 Whole video (frame-by-frame, reading the `segment` stage output):
 
 ```bash
 cd inpaint && uv run python -m inpaint.cli --command video --backend lama \
-    --video-lama.masks-json ../outputs/0/segment/masks.json \
-    --video-lama.vis --video-lama.lama.model-path ../ckpts/big-lama/big-lama.pt
+    --video.masks-json ../outputs/0/segment/masks.json \
+    --video.vis --video.lama.model-path ../ckpts/big-lama/big-lama.pt
 ```
-
-Writes to `outputs/<clip>/lama/` (`lama/`, `lama_vis/`, `lama.json`, `config.json`),
-mirroring the Qwen layout but keeping the two backends' outputs separate.
 
 Single masked frame:
 
@@ -190,13 +198,13 @@ uv run python -m inpaint.cli --command single --backend lama \
 
 ### Options
 
-- `--single.lama.model-path <path>` / `--video-lama.lama.model-path <path>` —
+- `--single.lama.model-path <path>` / `--video.lama.model-path <path>` —
   local TorchScript `big-lama.pt` (offline-friendly).
 - `--<scope>.lama.device auto|cuda[:N]|cpu` — torch device (default `auto`).
 - `--<scope>.lama.dilate-px <N>` — outward mask dilation in pixels (default
   `40`, area-adaptive); `0` disables.
 - `--<scope>.lama.overwrite` / `--<scope>.lama.no-overwrite` — recompute vs.
-  reuse outputs (scope = `single` or `video-lama`).
+  reuse outputs (scope = `single` or `video`).
 
 ### Notes
 

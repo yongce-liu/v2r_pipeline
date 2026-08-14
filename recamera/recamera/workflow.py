@@ -20,7 +20,6 @@ from PIL import Image
 import mujoco as mj
 
 from recamera.camera import refine_iou, solve_camera
-from recamera.geometry import backproject
 from recamera.inputs import EpisodeInputs
 from recamera.render import ArmSilhouetteRenderer, render_arm_rgba
 from recamera.robot import arm_body_ids, camera_id, skeleton_anchors
@@ -31,12 +30,22 @@ class RenderConfig:
     """Tunables for the depth-match + render pass."""
 
     skeleton_anchor_names: tuple[str, ...] = (
-        "left_shoulder_yaw_link", "left_elbow_link", "left_wrist_yaw_link",
-        "L_thumb_distal", "L_index_intermediate", "L_middle_intermediate",
-        "L_ring_intermediate", "L_pinky_intermediate",
-        "right_shoulder_yaw_link", "right_elbow_link", "right_wrist_yaw_link",
-        "R_thumb_distal", "R_index_intermediate", "R_middle_intermediate",
-        "R_ring_intermediate", "R_pinky_intermediate",
+        "left_shoulder_yaw_link",
+        "left_elbow_link",
+        "left_wrist_yaw_link",
+        "L_thumb_distal",
+        "L_index_intermediate",
+        "L_middle_intermediate",
+        "L_ring_intermediate",
+        "L_pinky_intermediate",
+        "right_shoulder_yaw_link",
+        "right_elbow_link",
+        "right_wrist_yaw_link",
+        "R_thumb_distal",
+        "R_index_intermediate",
+        "R_middle_intermediate",
+        "R_ring_intermediate",
+        "R_pinky_intermediate",
     )
     """Robot joint anchors used for the depth-match alignment signal."""
 
@@ -71,15 +80,11 @@ def write_config_json(output_dir: Path, cfg: RenderConfig, ep: EpisodeInputs) ->
     return path
 
 
-def _render_silhouette_fn(
-    model, data, camid, arm_ids, K, width, height, mask_shape
-):
+def _render_silhouette_fn(model, data, camid, arm_ids, K, width, height, mask_shape):
     """Build ``render_fn(T) -> bool arm-silhouette`` at reduced res."""
 
     def render_fn(T):
-        rgba = render_arm_rgba(
-            model, data, camid, arm_ids, T, K, width, height
-        )
+        rgba = render_arm_rgba(model, data, camid, arm_ids, T, K, width, height)
         return rgba[..., 3] > 0
 
     return render_fn

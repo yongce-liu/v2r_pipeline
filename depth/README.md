@@ -40,8 +40,8 @@ outputs/0/depth/
 ├── config.json     # effective run config (same style as process)
 ├── depth.json      # per-frame depth manifest (index / paths / depth stats)
 ├── depth.npz       # single aggregate file (depth + intrinsics + timestamps)
-├── depths/         # per-frame depth arrays (depth_000000.npy, ...)
-└── depths_vis/     # colorized depth maps (vis_000000.png, ...), only when vis=True
+├── depths/         # per-frame depth arrays (000000.npy, ...)
+└── depths_vis/     # colorized depth maps (000000.png, ...), only when vis=True
 ```
 
 The single aggregate file holds the whole clip's depths stacked as

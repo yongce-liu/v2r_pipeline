@@ -13,8 +13,8 @@ Output layout mirrors the ``process`` / ``segment`` / ``depth`` stages:
     outputs/<clip>/inpaint/
     ├── config.json     # effective run config (same style as process)
     ├── inpainted.json  # per-frame inpaint manifest (index / paths / prompt)
-    ├── inpainted/      # edited frames (inpainted_000000.png, ...)
-    └── inpainted_vis/  # original + edited side-by-side (vis_000000.png, ...),
+    ├── inpainted/      # edited frames (000000.png, ...)
+    └── inpainted_vis/  # original + edited side-by-side (000000.png, ...),
                         # only when vis=True
 """
 
@@ -32,6 +32,7 @@ from loguru import logger
 
 from inpaint import __version__
 from inpaint.frames import FrameManifest, load_frame_manifest
+from inpaint.lama.args import LamaInpaintArgs
 from inpaint.masks import load_mask_manifest
 from inpaint.media import (
     apply_mask_overlay,
@@ -42,20 +43,24 @@ from inpaint.media import (
 )
 from inpaint.qwen.inpainter import QwenInpaintArgs, QwenInpainter
 
-INPAINT_FILENAME_PATTERN = "inpainted_{:06d}.png"
-VIS_FILENAME_PATTERN = "vis_{:06d}.png"
+INPAINT_FILENAME_PATTERN = "{:06d}.png"
+VIS_FILENAME_PATTERN = "{:06d}.png"
 
 DEFAULT_MASK_COLOR_RGB = (0, 0, 255)
 
 
 @dataclass
 class InpaintVideoArgs:
-    """Arguments for frame-by-frame inpainting of a whole video."""
+    """Arguments for frame-by-frame inpainting of a whole video.
+
+    Shared by both backends; ``qwen`` / ``lama`` hold the backend-specific
+    settings (selected by ``--backend``).
+    """
 
     masks_json: Path | None = None
     """Path to the ``segment`` stage's ``masks.json`` (required for video mode)."""
 
-    output_root: Path = Path(__file__).parents[2] / "outputs"
+    output_root: Path = Path(__file__).parents[3] / "outputs"
     """Root under which ``<clip_stem>/inpaint/`` is created."""
 
     vis: bool = True
@@ -71,7 +76,10 @@ class InpaintVideoArgs:
     """Blend weight of the mask color over the masked region."""
 
     qwen: QwenInpaintArgs = field(default_factory=QwenInpaintArgs)
-    """Qwen-Image-Edit settings (checkpoint, device, prompt, steps, ...)."""
+    """Qwen-Image-Edit settings (used when ``--backend qwen``)."""
+
+    lama: LamaInpaintArgs = field(default_factory=LamaInpaintArgs)
+    """LaMa settings (used when ``--backend lama``)."""
 
 
 @dataclass(frozen=True)

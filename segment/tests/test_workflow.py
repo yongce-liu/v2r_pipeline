@@ -61,10 +61,10 @@ def test_run_video_segment_with_vis(tmp_path: Path) -> None:
     assert outputs.masks_dir.exists()
     assert outputs.masks_vis_dir is not None and outputs.masks_vis_dir.exists()
 
-    masks = sorted(p.name for p in outputs.masks_dir.glob("mask_*.png"))
-    vis = sorted(p.name for p in outputs.masks_vis_dir.glob("vis_*.jpg"))
-    assert masks == ["mask_000000.png", "mask_000001.png", "mask_000002.png"]
-    assert vis == ["vis_000000.jpg", "vis_000001.jpg", "vis_000002.jpg"]
+    masks = sorted(p.name for p in outputs.masks_dir.glob("*.png"))
+    vis = sorted(p.name for p in outputs.masks_vis_dir.glob("*.jpg"))
+    assert masks == ["000000.png", "000001.png", "000002.png"]
+    assert vis == ["000000.jpg", "000001.jpg", "000002.jpg"]
 
     manifest = json.loads(outputs.masks_json_path.read_text(encoding="utf-8"))
     assert manifest["frame_count"] == 3
@@ -75,9 +75,9 @@ def test_run_video_segment_with_vis(tmp_path: Path) -> None:
 
     entry = manifest["entries"][0]
     assert entry["index"] == 0
-    assert entry["frame_filename"] == "frame_000000.png"
-    assert entry["mask_filename"] == "mask_000000.png"
-    assert entry["vis_filename"] == "vis_000000.jpg"
+    assert entry["frame_filename"] == "000000.png"
+    assert entry["mask_filename"] == "000000.png"
+    assert entry["vis_filename"] == "000000.jpg"
     assert entry["has_mask"] is True
     assert entry["instance_count"] == 1
     assert entry["area"] == 4 * 4
@@ -87,7 +87,7 @@ def test_run_video_segment_with_vis(tmp_path: Path) -> None:
     assert config["package"]["name"] == "segment"
     assert config["source"]["frame_count"] == 3
     assert config["segment"]["vis"] is True
-    assert config["segment"]["text_prompt"] == "人手"
+    assert config["segment"]["text_prompt"] == "human hand and arm"
     assert config["segment"]["mask_color_rgb"] == [0, 0, 255]
 
     # The generator was reused for every frame (model loaded once).

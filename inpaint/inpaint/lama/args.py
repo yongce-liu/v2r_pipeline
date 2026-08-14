@@ -29,7 +29,7 @@ class LamaInpaintArgs:
     """Clear existing lama outputs and recompute. With it off, prior per-frame
     outputs are reused (idempotent re-runs)."""
 
-    dilate_px: int = 100
+    dilate_px: int = 50
     """Morphologically dilate the mask outward by this many pixels before
     inpainting. Segment masks hug the hand/arm contour tightly, which leaves a
     faint original-edge halo in the fill; a small dilation makes LaMa erase

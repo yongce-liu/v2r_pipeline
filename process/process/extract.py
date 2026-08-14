@@ -82,8 +82,8 @@ class ExtractOutputs:
 
 def _frame_pattern(format: str, zero_padding: int) -> str:
     if format == "jpg":
-        return f"frame_%0{zero_padding}d.jpg"
-    return f"frame_%0{zero_padding}d.png"
+        return f"%0{zero_padding}d.jpg"
+    return f"%0{zero_padding}d.png"
 
 
 def _ffmpeg_version(ffmpeg_bin: str) -> str:
@@ -150,11 +150,11 @@ def extract_frames(
     stage_dir = output_root / "process"
     frames_dir = stage_dir / "frames"
     if frames_dir.exists() and not args.overwrite:
-        existing = sorted(frames_dir.glob("frame_*.*"))
+        existing = sorted(frames_dir.glob(f"*.{args.format}"))
         if existing:
             entries = [
                 FrameManifestEntry(
-                    index=int(path.stem.split("_")[1]),
+                    index=int(path.stem),
                     filename=path.name,
                     timestamp_sec=None,
                 )
@@ -217,7 +217,7 @@ def extract_frames(
             f"{proc.stderr.strip()}"
         )
 
-    frames = sorted(frames_dir.glob("frame_*.*"))
+    frames = sorted(frames_dir.glob(f"*.{args.format}"))
     fps = args.fps or source_fps
     entries = []
     for index, path in enumerate(frames):

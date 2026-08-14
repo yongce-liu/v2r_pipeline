@@ -83,11 +83,9 @@ class InpaintCliArgs:
     single: SingleImageArgs = field(default_factory=SingleImageArgs)
     """Settings for ``--command single``."""
 
-    video_qwen: InpaintVideoArgs = field(default_factory=InpaintVideoArgs)
-    """Qwen settings for ``--command video --backend qwen``."""
-
-    video_lama: LamaVideoArgs = field(default_factory=LamaVideoArgs)
-    """LaMa settings for ``--command video --backend lama``."""
+    video: InpaintVideoArgs = field(default_factory=InpaintVideoArgs)
+    """Settings for ``--command video`` (shared; ``--video.qwen.*`` /
+    ``--video.lama.*`` select the backend)."""
 
 
 def inpaint_single_image(
@@ -150,17 +148,24 @@ def main() -> None:
         return
 
     if args.backend == "lama":
-        run_lama_video_inpaint(args.video_lama)
+        lama_args = LamaVideoArgs(
+            masks_json=args.video.masks_json,
+            output_root=args.video.output_root,
+            vis=args.video.vis,
+            max_frames=args.video.max_frames,
+            lama=args.video.lama,
+        )
+        run_lama_video_inpaint(lama_args)
         logger.info(
             "[inpaint] lama video inpainting complete: {}",
-            args.video_lama.masks_json,
+            args.video.masks_json,
         )
         return
 
-    run_video_inpaint(args.video_qwen)
+    run_video_inpaint(args.video)
     logger.info(
         "[inpaint] qwen video inpainting complete: {}",
-        args.video_qwen.masks_json,
+        args.video.masks_json,
     )
 
 

@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+
 from process.extract import ExtractArgs, extract_frames
 
 
@@ -57,9 +58,9 @@ def test_extract_frames(sample_video: Path, tmp_path: Path) -> None:
     manifest = output.manifest
     assert manifest.frame_count >= 5  # 0.5 s at 10 fps
     assert output.frames_dir.exists()
-    frames = sorted(output.frames_dir.glob("frame_*.png"))
+    frames = sorted(output.frames_dir.glob("*.png"))
     assert len(frames) == manifest.frame_count
-    assert frames[0].name == "frame_000000.png"
+    assert frames[0].name == "000000.png"
     # Manifest timestamps are strictly monotonic at 1/fps spacing.
     stamps = [entry.timestamp_sec for entry in manifest.entries]
     assert all(s is not None for s in stamps)
@@ -69,7 +70,7 @@ def test_extract_frames(sample_video: Path, tmp_path: Path) -> None:
 def test_extract_preserves_existing(tmp_path: Path) -> None:
     frames_dir = tmp_path / "process" / "frames"
     frames_dir.mkdir(parents=True)
-    (frames_dir / "frame_000000.png").write_bytes(b"placeholder")
+    (frames_dir / "000000.png").write_bytes(b"placeholder")
 
     output = extract_frames(
         video_path=tmp_path / "whatever.mp4",  # path never touched
@@ -104,7 +105,7 @@ def test_extract_overwrite_clears(sample_video: Path, tmp_path: Path) -> None:
     )
     assert not marker.exists()  # stale file cleared on overwrite
     assert second.manifest.frame_count >= 5
-    assert sorted(second.frames_dir.glob("frame_*")) != []
+    assert sorted(second.frames_dir.glob("*.png")) != []
 
 
 def test_extract_scale_expression() -> None:

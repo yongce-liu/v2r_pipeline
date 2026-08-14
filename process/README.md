@@ -26,8 +26,8 @@ outputs/a/process/
 ├── frames.json          # frame manifest (index / filename / timestamp_sec)
 ├── config.json          # effective run config + tool versions
 └── frames/
-    ├── frame_000000.png
-    ├── frame_000001.png
+    ├── 000000.png
+    ├── 000001.png
     └── ...
 ```
 

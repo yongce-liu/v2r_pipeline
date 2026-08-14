@@ -24,7 +24,7 @@ def build_process_layout(tmp_path: Path, frame_count: int = 3) -> tuple[Path, Pa
     frames_dir.mkdir(parents=True)
     for index in range(frame_count):
         rgb = np.full((8, 10, 3), index * 40, dtype=np.uint8)
-        Image.fromarray(rgb).save(frames_dir / f"frame_{index:06d}.png")
+        Image.fromarray(rgb).save(frames_dir / f"{index:06d}.png")
 
     frames_json = clip_root / "process" / "frames.json"
     frames_json.write_text(
@@ -40,7 +40,7 @@ def build_process_layout(tmp_path: Path, frame_count: int = 3) -> tuple[Path, Pa
                 "entries": [
                     {
                         "index": index,
-                        "filename": f"frame_{index:06d}.png",
+                        "filename": f"{index:06d}.png",
                         "timestamp_sec": index / 10.0,
                     }
                     for index in range(frame_count)
@@ -63,7 +63,7 @@ def test_load_frame_manifest(tmp_path: Path) -> None:
     assert manifest.height == 8
     assert len(manifest.entries) == 3
     assert manifest.entries[0].index == 0
-    assert manifest.entries[0].filename == "frame_000000.png"
+    assert manifest.entries[0].filename == "000000.png"
     assert manifest.entries[0].timestamp_sec == 0.0
     assert manifest.entries[0].path.exists()
 

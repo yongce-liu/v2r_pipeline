@@ -15,6 +15,7 @@ from recamera.geometry import backproject
 
 # --- geometry ---------------------------------------------------------------
 
+
 def _make_intrinsics(width=640, height=480, fx=500.0, fy=500.0, cx=320.0, cy=240.0):
     return np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]], dtype=np.float64)
 
@@ -73,8 +74,10 @@ def test_camera_center_roundtrip():
 # --- render (real assets required) ------------------------------------------
 
 _REPO_ROOT = __import__("pathlib").Path(__file__).resolve().parents[2]
-_ROBOT_XML = _REPO_ROOT / "assets/unitree_g1_mjcf" / (
-    "g1_29dof_rev_1_0_with_inspire_hand_DFQ.xml"
+_ROBOT_XML = (
+    _REPO_ROOT
+    / "assets/unitree_g1_mjcf"
+    / ("g1_29dof_rev_1_0_with_inspire_hand_DFQ.xml")
 )
 _EPISODE = _REPO_ROOT / "outputs" / "0"
 
@@ -87,7 +90,7 @@ def test_render_arm_rgba_transparent_background():
     import mujoco as mj
 
     from recamera.inputs import load_episode
-    from recamera.render import camera_axes_world, camera_center, render_arm_rgba
+    from recamera.render import render_arm_rgba
     from recamera.robot import arm_body_ids, build_model, camera_id
 
     ep = load_episode(_EPISODE.parent, _EPISODE.name)
@@ -101,7 +104,6 @@ def test_render_arm_rgba_transparent_background():
 
     # a camera that frames the arm: from above-left, looking at the arm centroid
     from recamera.robot import skeleton_anchors
-    from recamera.geometry import backproject
 
     J = skeleton_anchors(model, data)
     armc = J.mean(0)
@@ -132,7 +134,6 @@ def test_refine_iou_keeps_aligned_pose():
     camid = camera_id(model)
     arm_ids = arm_body_ids(model)
     K = ep.intrinsics[0]
-    from recamera.geometry import backproject
 
     J = skeleton_anchors(model, data)
     armc = J.mean(0)
@@ -148,9 +149,7 @@ def test_refine_iou_keeps_aligned_pose():
 
     from PIL import Image
 
-    mask_small = np.asarray(
-        Image.fromarray(ep.masks[0]).resize((320, 180))
-    ) > 0
+    mask_small = np.asarray(Image.fromarray(ep.masks[0]).resize((320, 180))) > 0
     iou0 = _silhouette_iou(T, render_fn, mask_small)
     T2 = refine_iou(T, render_fn=render_fn, mask=mask_small, max_iter=40)
     iou1 = _silhouette_iou(T2, render_fn, mask_small)

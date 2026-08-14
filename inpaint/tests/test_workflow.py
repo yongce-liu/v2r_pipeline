@@ -58,14 +58,14 @@ def test_run_video_inpaint_with_vis(tmp_path: Path) -> None:
     assert outputs.inpainted_dir.exists()
     assert outputs.inpainted_vis_dir is not None and outputs.inpainted_vis_dir.exists()
 
-    inpainted = sorted(p.name for p in outputs.inpainted_dir.glob("inpainted_*.png"))
-    vis = sorted(p.name for p in outputs.inpainted_vis_dir.glob("vis_*.png"))
+    inpainted = sorted(p.name for p in outputs.inpainted_dir.glob("*.png"))
+    vis = sorted(p.name for p in outputs.inpainted_vis_dir.glob("*.png"))
     assert inpainted == [
-        "inpainted_000000.png",
-        "inpainted_000001.png",
-        "inpainted_000002.png",
+        "000000.png",
+        "000001.png",
+        "000002.png",
     ]
-    assert vis == ["vis_000000.png", "vis_000001.png", "vis_000002.png"]
+    assert vis == ["000000.png", "000001.png", "000002.png"]
 
     manifest = json.loads(outputs.inpainted_json_path.read_text(encoding="utf-8"))
     assert manifest["frame_count"] == 3
@@ -79,14 +79,14 @@ def test_run_video_inpaint_with_vis(tmp_path: Path) -> None:
     entry = manifest["entries"][0]
     assert entry["index"] == 0
     assert entry["has_mask"] is True
-    assert entry["inpainted_filename"] == "inpainted_000000.png"
-    assert entry["vis_filename"] == "vis_000000.png"
+    assert entry["inpainted_filename"] == "000000.png"
+    assert entry["vis_filename"] == "000000.png"
     edited = np.asarray(Image.open(outputs.inpainted_dir / entry["inpainted_filename"]))
     assert edited.shape == FRAME_SHAPE + (3,)
     assert tuple(edited[3, 3]) == (255, 0, 0)
 
     # Frame 2 had no mask -> passthrough, original unchanged.
-    passthrough = np.asarray(Image.open(outputs.inpainted_dir / "inpainted_000002.png"))
+    passthrough = np.asarray(Image.open(outputs.inpainted_dir / "000002.png"))
     assert tuple(passthrough[3, 3]) == (80, 80, 80)  # frame index 2 gray
 
     config = json.loads(outputs.config_json_path.read_text(encoding="utf-8"))
@@ -146,7 +146,7 @@ def test_run_video_inpaint_idempotent_skip(tmp_path: Path) -> None:
     )
     assert second.inpainted_json_path.exists()
     assert len(second.entries) == 3
-    assert (second.inpainted_dir / "inpainted_000000.png").exists()
+    assert (second.inpainted_dir / "000000.png").exists()
 
 
 def test_run_video_inpaint_missing_masks_json(tmp_path: Path) -> None:

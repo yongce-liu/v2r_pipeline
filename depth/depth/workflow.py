@@ -14,8 +14,8 @@ Output layout mirrors the ``process`` / ``segment`` stages:
     ├── config.json     # effective run config (same style as process)
     ├── depth.json      # per-frame depth manifest (index / paths / depth stats)
     ├── depth.npz       # single aggregate file (all depth + intrinsics + timestamps)
-    ├── depths/         # per-frame depth arrays (depth_000000.npy, ...)
-    └── depths_vis/     # only when vis=True (vis_000000.png, ...)
+    ├── depths/         # per-frame depth arrays (000000.npy, ...)
+    └── depths_vis/     # only when vis=True (000000.png, ...)
 """
 
 from __future__ import annotations
@@ -39,8 +39,8 @@ from depth import __version__
 from depth.da3 import Da3Predictor
 from depth.frames import FrameManifest, load_frame_manifest
 
-DEPTH_FILENAME_PATTERN = "depth_{:06d}.npy"
-VIS_FILENAME_PATTERN = "vis_{:06d}.png"
+DEPTH_FILENAME_PATTERN = "{:06d}.npy"
+VIS_FILENAME_PATTERN = "{:06d}.png"
 
 AggregateFormat = Literal["npz", "pkl", "json"]
 
