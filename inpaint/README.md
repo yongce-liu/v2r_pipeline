@@ -165,8 +165,15 @@ background — the CLI enforces `--single.mask-path`.
 
 The mask is **morphologically dilated** before inpainting so LaMa erases the
 faint original-edge halo that a tight segment mask leaves. The outward expansion
-is area-aware (≈`dilate_px` at a mid-size hand of ~1e6 px, scaling sub-linearly
-with mask area); `--single.lama.dilate-px 0` disables it.
+is a **fraction of the frame's shorter side** (`--<scope>.lama.dilate-ratio`,
+default `0.05` ≈ 54 px at 1080p), so it scales with the source resolution
+instead of being a fixed pixel count; `--single.lama.dilate-ratio 0` disables it.
+
+Because LaMa fills large holes in a single forward pass, `--<scope>.lama.repeat`
+(default `1`) can be raised to re-run the network on its own output with the
+**same mask** (the hole is re-zeroed internally, so each pass sees cleaner
+boundary context); `2`–`3` typically cleans up residual boundary artifacts at
+≈N× the per-frame cost.
 
 **The output does not differ by backend.** Both Qwen and LaMa write to the same
 `outputs/<clip>/inpaint/` layout with pure-index frame names:
@@ -201,8 +208,10 @@ uv run python -m inpaint.cli --command single --backend lama \
 - `--single.lama.model-path <path>` / `--video.lama.model-path <path>` —
   local TorchScript `big-lama.pt` (offline-friendly).
 - `--<scope>.lama.device auto|cuda[:N]|cpu` — torch device (default `auto`).
-- `--<scope>.lama.dilate-px <N>` — outward mask dilation in pixels (default
-  `40`, area-adaptive); `0` disables.
+- `--<scope>.lama.dilate-ratio <F>` — outward mask dilation as a fraction of
+  the frame's shorter side (default `0.05` ≈ 54 px at 1080p); `0` disables.
+- `--<scope>.lama.repeat <N>` — LaMa passes per masked frame, re-feeding the
+  output with the same mask (default `1`).
 - `--<scope>.lama.overwrite` / `--<scope>.lama.no-overwrite` — recompute vs.
   reuse outputs (scope = `single` or `video`).
 

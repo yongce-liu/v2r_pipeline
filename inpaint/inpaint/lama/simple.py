@@ -102,52 +102,59 @@ class SimpleLamaInpainter:
         pil_image = self._to_pil_rgb(image)
         pil_mask = self._to_pil_mask(mask)
 
-        if args.dilate_px > 0:
+        if args.dilate_ratio > 0:
             pil_mask = self._dilate_mask(pil_mask, args)
 
-        result = self.simple_lama(pil_image, pil_mask)
+        # Repeat passes re-feed the previous output with the SAME mask: LaMa
+        # zeroes the hole internally, so each pass reads progressively cleaner
+        # boundary context and a large fill converges instead of staying a
+        # single-shot result.
+        result = pil_image
+        for _ in range(args.repeat):
+            result = self.simple_lama(result, pil_mask)
         result.save(output_path)
 
         logger.info(
-            "[simple-lama] Inference complete: elapsed={:.2f}s, output={}",
+            "[simple-lama] Inference complete: passes={} elapsed={:.2f}s, output={}",
+            args.repeat,
             time.perf_counter() - started_at,
             output_path,
         )
 
     @staticmethod
-    def _dilation_px_for_area(area_px: int, dilate_px: int) -> int:
-        """Area-adaptive outward dilation (px) for a mask covering ``area_px``.
+    def _dilation_px_for_frame(min_side_px: int, dilate_ratio: float) -> int:
+        """Outward dilation (px) for a frame whose shorter side is ``min_side_px``.
 
-        ``dilate_px`` is the expansion at the reference area (~1e6 px, a
-        mid-size hand at 1080p). The effective expansion scales sub-linearly
-        with mask area (``dilate_px * sqrt(area / ref_area)``), so a larger
-        mask erodes a wider margin but not proportionally. Returns 0 for a
-        zero-area mask or when dilation is disabled (``dilate_px <= 0``).
+        Dilation is ``dilate_ratio`` of the frame's shorter side, so it scales
+        with the source resolution instead of being a fixed pixel count (a fixed
+        px is a tiny fraction of a 4K frame but a large chunk of a 720p one).
+        Returns 0 for an empty frame or when dilation is disabled
+        (``dilate_ratio <= 0``).
         """
-        _REF_AREA_PX = 1_000_000
-        if dilate_px <= 0 or area_px <= 0:
+        if dilate_ratio <= 0 or min_side_px <= 0:
             return 0
-        ratio = area_px / _REF_AREA_PX
-        return max(1, round(dilate_px * (ratio**0.5)))
+        return max(1, round(dilate_ratio * min_side_px))
 
     @staticmethod
     def _dilate_mask(mask_pil, args: LamaInpaintArgs):
-        """Dilate a PIL ``L`` mask outward by an area-adaptive pixel amount."""
+        """Dilate a PIL ``L`` mask outward by a frame-relative pixel amount."""
 
         from PIL import Image
 
         arr = np.asarray(mask_pil)
         binary = (arr > 0).astype(np.uint8) * 255
-        area = int(binary.sum() / 255)
-        k = SimpleLamaInpainter._dilation_px_for_area(area, args.dilate_px)
+        k = SimpleLamaInpainter._dilation_px_for_frame(
+            min(mask_pil.size), args.dilate_ratio
+        )
         if k > 0:
             kernel = cv2.getStructuringElement(
                 cv2.MORPH_ELLIPSE, (2 * k + 1, 2 * k + 1)
             )
             binary = cv2.dilate(binary, kernel, iterations=1)
         logger.info(
-            "[simple-lama] mask dilation: area={}px -> {}px",
-            area,
+            "[simple-lama] mask dilation: frame={} ratio={} -> {}px",
+            mask_pil.size,
+            args.dilate_ratio,
             k,
         )
         return Image.fromarray(binary, mode="L")

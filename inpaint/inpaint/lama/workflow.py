@@ -187,7 +187,8 @@ def _config_dict(args: LamaVideoArgs) -> dict:
             "overwrite": args.lama.overwrite,
             "vis": args.vis,
             "max_frames": args.max_frames,
-            "dilate_px": args.lama.dilate_px,
+            "dilate_ratio": args.lama.dilate_ratio,
+            "repeat": args.lama.repeat,
         },
         "software": {},
     }

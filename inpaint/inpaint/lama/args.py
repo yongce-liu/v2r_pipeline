@@ -29,10 +29,19 @@ class LamaInpaintArgs:
     """Clear existing lama outputs and recompute. With it off, prior per-frame
     outputs are reused (idempotent re-runs)."""
 
-    dilate_px: int = 50
-    """Morphologically dilate the mask outward by this many pixels before
-    inpainting. Segment masks hug the hand/arm contour tightly, which leaves a
-    faint original-edge halo in the fill; a small dilation makes LaMa erase
-    that halo. The effective expansion is area-aware: at a reference mask of
-    ~1e6 px (a mid-size hand at 1080p) it equals ``dilate_px``, growing
-    sub-linearly with mask area. ``0`` disables dilation."""
+    dilate_ratio: float = 0.05
+    """Morphologically dilate the mask outward by this fraction of the frame's
+    shorter side before inpainting. Segment masks hug the hand/arm contour
+    tightly, which leaves a faint original-edge halo in the fill; a small
+    dilation makes LaMa erase that halo. Being a ratio of the image size (not a
+    fixed pixel count) it stays consistent across source resolutions: at 1080p
+    ``0.05`` ≈ 54 px, close to the old fixed-pixel default of 50; a 720p frame
+    gets half that, a 4K frame twice that. ``0`` disables dilation."""
+
+    repeat: int = 1
+    """Number of LaMa passes per masked frame. Each pass re-feeds the previous
+    output with the SAME (dilated) mask — the hole is re-zeroed inside the
+    network, so the boundary context is the previous fill and large holes
+    converge instead of being a single-shot fill. ``1`` = single pass (current
+    behavior); 2–3 typically cleans up residual boundary artifacts at ≈N× the
+    per-frame cost."""

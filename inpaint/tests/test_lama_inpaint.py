@@ -71,8 +71,8 @@ class FakeSimpleLama:
 
 def _make_simple_inpainter(**kwargs) -> SimpleLamaInpainter:
     # Default to no dilation so conversion-contract tests aren't affected by
-    # the default dilate_px=40.
-    kwargs.setdefault("dilate_px", 0)
+    # the default dilate_ratio=0.05.
+    kwargs.setdefault("dilate_ratio", 0.0)
     inpainter = SimpleLamaInpainter(LamaInpaintArgs(**kwargs))
     inpainter._simple_lama = FakeSimpleLama()
     return inpainter
@@ -176,43 +176,53 @@ def test_simple_lama_inpainter_overwrite_skip(tmp_path: Path) -> None:
     assert inpainter.simple_lama.calls == []  # never reached the model
 
 
-def test_dilation_px_scales_with_area() -> None:
-    """The outward dilation grows with mask area, sub-linearly (sqrt)."""
+def test_dilation_ratio_scales_with_frame_size() -> None:
+    """The outward dilation is a fraction of the frame's shorter side."""
 
+    # 1080p: 0.05 * 1080 = 54 px; 540p half that; 4K (2160p) twice that.
     assert (
-        SimpleLamaInpainter._dilation_px_for_area(area_px=1_000_000, dilate_px=40) == 40
+        SimpleLamaInpainter._dilation_px_for_frame(min_side_px=1080, dilate_ratio=0.05)
+        == 54
     )
     assert (
-        SimpleLamaInpainter._dilation_px_for_area(area_px=4_000_000, dilate_px=40) == 80
+        SimpleLamaInpainter._dilation_px_for_frame(min_side_px=540, dilate_ratio=0.05)
+        == 27
     )
-    # smaller mask -> smaller dilation (but at least 1)
     assert (
-        SimpleLamaInpainter._dilation_px_for_area(area_px=250_000, dilate_px=40) == 20
+        SimpleLamaInpainter._dilation_px_for_frame(min_side_px=2160, dilate_ratio=0.05)
+        == 108
     )
-    # zero-area or disabled -> 0
-    assert SimpleLamaInpainter._dilation_px_for_area(area_px=0, dilate_px=40) == 0
+    # tiny frame still dilates at least 1 px
     assert (
-        SimpleLamaInpainter._dilation_px_for_area(area_px=1_000_000, dilate_px=0) == 0
+        SimpleLamaInpainter._dilation_px_for_frame(min_side_px=10, dilate_ratio=0.001)
+        == 1
+    )
+    # empty frame or disabled -> 0
+    assert (
+        SimpleLamaInpainter._dilation_px_for_frame(min_side_px=0, dilate_ratio=0.05)
+        == 0
+    )
+    assert (
+        SimpleLamaInpainter._dilation_px_for_frame(min_side_px=1080, dilate_ratio=0.0)
+        == 0
     )
 
 
 def test_dilate_mask_expands_outward() -> None:
-    """Dilation grows the mask outward by the area-adaptive amount."""
+    """Dilation grows the mask outward by the frame-relative amount."""
 
-    # A large-enough mask so the computed dilation is meaningfully > 0.
-    # area = 200x200 = 40000 px -> k = 40 * sqrt(40000/1e6) = 8px.
-    mask = Image.new("L", (256, 256), 0)
-    for y in range(28, 228):
-        for x in range(28, 228):
+    # 200x200 frame, block 28..172 -> k = 0.04 * 200 = 8 px.
+    mask = Image.new("L", (200, 200), 0)
+    for y in range(28, 172):
+        for x in range(28, 172):
             mask.putpixel((x, y), 255)
-    args = LamaInpaintArgs(dilate_px=40)
-    area = int(np.asarray(mask).sum() / 255)
+    args = LamaInpaintArgs(dilate_ratio=0.04)
 
     dilated = SimpleLamaInpainter._dilate_mask(mask, args)
     assert dilated.mode == "L"
     assert dilated.size == mask.size
-    k = SimpleLamaInpainter._dilation_px_for_area(area, args.dilate_px)
-    assert k == 8  # 40 * sqrt(40000/1e6)
+    k = SimpleLamaInpainter._dilation_px_for_frame(200, args.dilate_ratio)
+    assert k == 8  # 0.04 * 200
     # the block grew outward by ~k px: the left edge moved from 28 toward 28-k
     # (assert on the edge, not the rounded corner)
     assert dilated.getpixel((28 - k, 28)) > 0  # left edge expanded by ~k
@@ -221,25 +231,25 @@ def test_dilate_mask_expands_outward() -> None:
 
 
 def test_dilate_mask_disabled_is_noop() -> None:
-    """dilate_px=0 leaves the mask unchanged."""
+    """dilate_ratio=0 leaves the mask unchanged."""
 
     mask = Image.new("L", (16, 16), 0)
     mask.putpixel((8, 8), 255)
-    args = LamaInpaintArgs(dilate_px=0)
+    args = LamaInpaintArgs(dilate_ratio=0.0)
 
     dilated = SimpleLamaInpainter._dilate_mask(mask, args)
     assert np.array_equal(np.asarray(dilated), np.asarray(mask))
 
 
 def test_inpaint_passes_dilated_mask(tmp_path: Path) -> None:
-    """With dilate_px>0 the mask handed to SimpleLama is the dilated one."""
+    """With dilate_ratio>0 the mask handed to SimpleLama is the dilated one."""
 
-    inpainter = _make_simple_inpainter(dilate_px=40)
+    inpainter = _make_simple_inpainter(dilate_ratio=0.04)
     out = tmp_path / "out.png"
-    # same realistic mask as above (200x200 block) -> k = 8
-    mask = Image.new("L", (256, 256), 0)
-    for y in range(28, 228):
-        for x in range(28, 228):
+    # same realistic mask as above (200x200 frame, 144x144 block) -> k = 8
+    mask = Image.new("L", (200, 200), 0)
+    for y in range(28, 172):
+        for x in range(28, 172):
             mask.putpixel((x, y), 255)
 
     inpainter.inpaint(_dummy_image(), out, inpainter.args, mask=mask)
@@ -247,8 +257,51 @@ def test_inpaint_passes_dilated_mask(tmp_path: Path) -> None:
     passed_mask = inpainter.simple_lama.calls[0][1]
     assert isinstance(passed_mask, Image.Image)
     assert passed_mask.mode == "L"
-    # the dilated mask has more nonzero pixels than the original 200x200 block
-    assert int(np.asarray(passed_mask).sum() / 255) > 200 * 200
+    # the dilated mask has more nonzero pixels than the original 144x144 block
+    assert int(np.asarray(passed_mask).sum() / 255) > 144 * 144
+
+
+def test_inpaint_repeat_runs_multiple_passes(tmp_path: Path) -> None:
+    """repeat=N re-feeds the previous output with the SAME mask N times."""
+
+    inpainter = _make_simple_inpainter()
+    out = tmp_path / "out.png"
+    inpainter.inpaint(
+        _dummy_image(),
+        out,
+        LamaInpaintArgs(repeat=3),
+        mask=_dummy_mask(),
+    )
+
+    fake = inpainter.simple_lama
+    assert len(fake.calls) == 3
+    # every pass sees a PIL RGB frame and the identical mask (unchanged size)
+    first_mask = np.asarray(fake.calls[0][1])
+    for passed_image, passed_mask in fake.calls:
+        assert isinstance(passed_image, Image.Image) and passed_image.mode == "RGB"
+        assert isinstance(passed_mask, Image.Image) and passed_mask.mode == "L"
+        assert np.array_equal(np.asarray(passed_mask), first_mask)
+    assert out.exists()
+
+
+def test_lama_video_workflow_records_dilation_and_repeat(tmp_path: Path) -> None:
+    """config.json records the effective dilate_ratio and repeat."""
+
+    masks_json, _ = _build_segmented_clip(tmp_path, frame_count=3)
+    run_lama_video_inpaint(
+        LamaVideoArgs(
+            masks_json=masks_json,
+            output_root=tmp_path,
+            lama=LamaInpaintArgs(dilate_ratio=0.07, repeat=2),
+        ),
+        inpainter=FakeLamaInpainter(),
+    )
+
+    config = json.loads(
+        (tmp_path / "0" / "inpaint" / "config.json").read_text(encoding="utf-8")
+    )
+    assert config["inpaint"]["dilate_ratio"] == 0.07
+    assert config["inpaint"]["repeat"] == 2
 
 
 def _dummy_image():
