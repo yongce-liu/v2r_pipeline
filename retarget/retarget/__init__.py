@@ -8,6 +8,12 @@ dataset-loading, video, or torch dependencies, so it runs in an isolated uv
 environment.
 """
 
+# Temporary GMR registry names injected by this package. Defined before the
+# module imports below: ``retarget.retargeter`` does
+# ``from retarget import GMR_SRC_HUMAN, GMR_TGT_ROBOT`` at import time.
+GMR_SRC_HUMAN = "ego2robo_human"
+GMR_TGT_ROBOT = "ego2robo_robot"
+
 from retarget.dex_retargeter import DexHandRetargeter
 from retarget.gmr_retargeter import (
     GMRRetargeter,
@@ -32,12 +38,6 @@ from retarget.visualize import (
     load_playback,
     render_video,
 )
-
-# Temporary GMR registry names injected by this package.
-# Defined before the module imports below: ``retarget.retargeter`` does
-# ``from retarget import GMR_SRC_HUMAN, GMR_TGT_ROBOT`` at import time.
-GMR_SRC_HUMAN = "ego2robo_human"
-GMR_TGT_ROBOT = "ego2robo_robot"
 
 __all__ = [
     "DexHandRetargeter",

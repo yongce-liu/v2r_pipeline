@@ -22,7 +22,7 @@ class ProcessCliArgs:
     video_path: Path
     """Source video to ingest (treated as read-only)."""
 
-    output_root: Path = Path(__file__).parents[1] / "outputs"
+    output_root: Path = Path(__file__).parents[2] / "outputs"
     """Root under which ``<video_stem>/process/`` is created."""
 
     extract: ExtractArgs = field(default_factory=ExtractArgs)
