@@ -1,4 +1,6 @@
 {
+  "source_type": "egodex",
+  "robot_xml": "assets/unitree_g1_mjcf/g1_29dof_rev_1_0_with_inspire_hand_DFQ.xml",
   "robot_root_name": "d435_link",
   "human_root_name": "camera",
   "ground_height": 0.0,
