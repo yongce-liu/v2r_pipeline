@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "inpaint"
 version = "0.1.0"
-description = "Hand/arm removal inpainting for EgoDataPipe segment outputs (Qwen-Image-Edit and LaMa backends)"
+description = "Hand/arm removal inpainting for EgoDataPipe segment outputs (Qwen-Image-Edit, LaMa and ProPainter backends)"
 readme = "README.md"
 requires-python = ">=3.10,<3.11"
 dependencies = [
@@ -25,6 +25,7 @@ dependencies = [
   # Third-party TorchScript big-lama wrapper (the LaMa backend). Its
   # pillow<10 requirement is overridden in [tool.uv] to keep pillow>=10.
   "simple-lama-inpainting==0.1.2",
+  "propainter>=0.0.4",
 ]
 
 [project.scripts]

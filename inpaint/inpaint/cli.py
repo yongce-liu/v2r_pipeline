@@ -4,7 +4,8 @@ Two axes, dispatched with ``--command`` and ``--backend``:
 
 - ``command``: ``single`` (one masked frame) or ``video`` (frame-by-frame,
   reading the ``segment`` stage's ``masks.json``).
-- ``backend``: ``qwen`` (Qwen-Image-Edit) or ``lama`` (simple-lama big-lama).
+- ``backend``: ``qwen`` (Qwen-Image-Edit), ``lama`` (simple-lama big-lama) or
+  ``propainter`` (streaming video ProPainter).
 
 Usage:
 
@@ -31,6 +32,13 @@ Usage:
     uv run python -m inpaint.cli --command video --backend lama \
         --video.masks-json outputs/0/segment/masks.json \
         --video.vis --video.lama.model-path ckpts/big-lama/big-lama.pt
+
+    # Full video with ProPainter (streaming; video-only backend). Checkpoints
+    # default to ckpts/propainter; the package falls back to its own pretrained
+    # weights when a local file is missing or in a different format.
+    uv run python -m inpaint.cli --command video --backend propainter \
+        --video.masks-json outputs/0/segment/masks.json \
+        --video.vis --video.propainter.model-dir ckpts/propainter
 """
 
 from __future__ import annotations
@@ -45,6 +53,11 @@ from loguru import logger
 from inpaint.lama.args import LamaInpaintArgs
 from inpaint.lama.simple import SimpleLamaInpainter
 from inpaint.lama.workflow import LamaVideoArgs, run_lama_video_inpaint
+from inpaint.propainter.args import ProPainterInpaintArgs
+from inpaint.propainter.workflow import (
+    ProPainterVideoArgs,
+    run_propainter_video_inpaint,
+)
 from inpaint.qwen.inpainter import QwenInpaintArgs, QwenInpainter
 from inpaint.qwen.workflow import InpaintVideoArgs, run_video_inpaint
 
@@ -66,19 +79,23 @@ class SingleImageArgs:
     lama: LamaInpaintArgs = field(default_factory=LamaInpaintArgs)
     """LaMa settings (used when ``--backend lama``)."""
 
+    propainter: ProPainterInpaintArgs = field(default_factory=ProPainterInpaintArgs)
+    """ProPainter settings (video-only; used when ``--backend propainter``)."""
+
 
 @dataclass
 class InpaintCliArgs:
-    """Run hand/arm-removal inpainting (Qwen-Image-Edit or LaMa), single image
-    or full video."""
+    """Run hand/arm-removal inpainting (Qwen-Image-Edit, LaMa or ProPainter),
+    single image or full video."""
 
     command: Literal["single", "video"] = "video"
     """One masked image (``single``) or every masked frame of a video
     (``video``, reading the segment stage's masks.json)."""
 
-    backend: Literal["qwen", "lama"] = "lama"
-    """Inpainting backend: ``qwen`` (Qwen-Image-Edit) or ``lama`` (big-lama via
-    simple-lama-inpainting)."""
+    backend: Literal["qwen", "lama", "propainter"] = "propainter"
+    """Inpainting backend: ``qwen`` (Qwen-Image-Edit), ``lama`` (big-lama via
+    simple-lama-inpainting) or ``propainter`` (streaming video ProPainter,
+    video-only)."""
 
     single: SingleImageArgs = field(default_factory=SingleImageArgs)
     """Settings for ``--command single``."""
@@ -128,6 +145,11 @@ def main() -> None:
     args = tyro.cli(InpaintCliArgs)
 
     if args.command == "single":
+        if args.backend == "propainter":
+            raise ValueError(
+                "--backend propainter is a video-only backend: use --command "
+                "video with --video.masks-json instead."
+            )
         if args.single.image_path is None or args.single.output_path is None:
             raise ValueError(
                 "--command single requires --single.image-path and --single.output-path."
@@ -144,6 +166,21 @@ def main() -> None:
             "[inpaint] single-image {} edit complete: {}",
             args.backend,
             output,
+        )
+        return
+
+    if args.backend == "propainter":
+        propainter_args = ProPainterVideoArgs(
+            masks_json=args.video.masks_json,
+            output_root=args.video.output_root,
+            vis=args.video.vis,
+            max_frames=args.video.max_frames,
+            propainter=args.video.propainter,
+        )
+        run_propainter_video_inpaint(propainter_args)
+        logger.info(
+            "[inpaint] propainter video inpainting complete: {}",
+            args.video.masks_json,
         )
         return
 

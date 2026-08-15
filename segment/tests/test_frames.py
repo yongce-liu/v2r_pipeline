@@ -40,7 +40,7 @@ def build_process_layout(tmp_path: Path, frame_count: int = 3) -> tuple[Path, Pa
                 "entries": [
                     {
                         "index": index,
-                        "filename": f"{index:06d}.png",
+                        "frame_filename": f"{index:06d}.png",
                         "timestamp_sec": index / 10.0,
                     }
                     for index in range(frame_count)
@@ -63,7 +63,7 @@ def test_load_frame_manifest(tmp_path: Path) -> None:
     assert manifest.height == 8
     assert len(manifest.entries) == 3
     assert manifest.entries[0].index == 0
-    assert manifest.entries[0].filename == "000000.png"
+    assert manifest.entries[0].frame_filename == "000000.png"
     assert manifest.entries[0].timestamp_sec == 0.0
     assert manifest.entries[0].path.exists()
 

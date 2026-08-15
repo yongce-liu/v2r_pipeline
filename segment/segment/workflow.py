@@ -297,7 +297,7 @@ def run_video_segment(
         entries.append(
             MaskEntry(
                 index=frame.index,
-                frame_filename=frame.filename,
+                frame_filename=frame.frame_filename,
                 timestamp_sec=frame.timestamp_sec,
                 mask_filename=mask_filename,
                 vis_filename=vis_filename,

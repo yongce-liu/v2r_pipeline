@@ -21,7 +21,7 @@ class FrameManifestEntry:
     def to_dict(self) -> dict:
         return {
             "index": self.index,
-            "filename": self.filename,
+            "frame_filename": self.filename,
             "timestamp_sec": self.timestamp_sec,
         }
 

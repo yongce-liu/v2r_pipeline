@@ -23,7 +23,7 @@ For `inputs/a.mp4` this creates:
 ```
 outputs/a/process/
 ├── video_info.json      # source container + stream metadata (from ffprobe)
-├── frames.json          # frame manifest (index / filename / timestamp_sec)
+├── frames.json          # frame manifest (index / frame_filename / timestamp_sec)
 ├── config.json          # effective run config + tool versions
 └── frames/
     ├── 000000.png

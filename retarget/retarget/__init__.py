@@ -34,8 +34,10 @@ from retarget.retargeter import (
     build_dex_retargeter,
 )
 from retarget.visualize import (
+    build_head_camera_model,
     launch_viewer,
     load_playback,
+    render_head_camera_frames,
     render_video,
 )
 
@@ -55,7 +57,9 @@ __all__ = [
     "load_ik_config",
     "merge_gmr_hand_points",
     "required_gmr_hand_points",
+    "build_head_camera_model",
     "launch_viewer",
     "load_playback",
+    "render_head_camera_frames",
     "render_video",
 ]

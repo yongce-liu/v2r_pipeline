@@ -55,7 +55,8 @@ class RetargetArgs:
 
     frames_json: Path | None = None
     """Process-step frame manifest supplying output timestamps. Defaults to
-    ``outputs/<input-stem>/process/frames.json``."""
+    ``outputs/<input-stem>/process/frames.json``. When the default file is
+    absent, each source frame's own timestamp is used instead."""
 
     vis: bool = False
     """Render a third-person video of the retargeted motion to
@@ -64,6 +65,33 @@ class RetargetArgs:
     mujoco: bool = False
     """Replay the retargeted motion in the interactive mujoco viewer, looping
     until the window is closed or the process is interrupted (Ctrl-C)."""
+
+    head_camera: bool = False
+    """Render first-person frames from a camera mounted on the robot's head,
+    writing RGB PNGs and float32 depth NPYs into the ``head_camera_rgb/`` and
+    ``head_camera_depth/`` subdirectories of the output dir."""
+
+    head_camera_width: int = 640
+    """Head-camera render width in pixels."""
+
+    head_camera_height: int = 480
+    """Head-camera render height in pixels."""
+
+    head_camera_body: str = "d435_link"
+    """Robot body the head camera is mounted on (follows its motion)."""
+
+    head_camera_pos: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    """Camera offset (x, y, z) in meters relative to the mount body."""
+
+    head_camera_quat: tuple[float, float, float, float] = (
+        0.7071068,
+        0.0,
+        -0.7071068,
+        0.0,
+    )
+    """Camera orientation (w, x, y, z) relative to the mount body.
+
+    Defaults to looking along the mount body's +x (Unitree forward axis)."""
 
 
 TRAJECTORY_FILENAME = "trajectory.npz"
@@ -161,7 +189,16 @@ def main(args: RetargetArgs | None = None) -> None:
     frames_json = args.frames_json or (
         cwd / f"outputs/{Path(args.input).stem}/process/frames.json"
     )
-    frame_timestamps = load_frame_timestamps(frames_json)
+    if frames_json.is_file():
+        frame_timestamps = load_frame_timestamps(frames_json)
+    elif args.frames_json is not None:
+        raise FileNotFoundError(f"frames-json not found: {frames_json}")
+    else:
+        # No process-step manifest yet: fall back to each source frame's own
+        # timestamp (EgoDex frames carry index/fps), so retarget can run before
+        # the video-ingest steps on a new episode.
+        print(f"frames.json not found at {frames_json}; using source frame timestamps")
+        frame_timestamps = None
 
     frames = iter_source_frames(
         source_type,
@@ -198,6 +235,33 @@ def main(args: RetargetArgs | None = None) -> None:
             render_video(playback, output_dir / VIS_FILENAME)
         if args.mujoco:
             launch_viewer(playback)
+
+    if args.head_camera:
+        from retarget.visualize import (
+            HEAD_CAMERA_DEPTH_DIRNAME,
+            HEAD_CAMERA_RGB_DIRNAME,
+            build_head_camera_model,
+            load_playback,
+            render_head_camera_frames,
+        )
+
+        camera_model, camera_id = build_head_camera_model(
+            robot_xml,
+            body_name=args.head_camera_body,
+            pos=args.head_camera_pos,
+            quat=args.head_camera_quat,
+            width=args.head_camera_width,
+            height=args.head_camera_height,
+        )
+        camera_playback = load_playback(camera_model, output)
+        render_head_camera_frames(
+            camera_playback,
+            camera_id,
+            output_dir / HEAD_CAMERA_RGB_DIRNAME,
+            output_dir / HEAD_CAMERA_DEPTH_DIRNAME,
+            width=args.head_camera_width,
+            height=args.head_camera_height,
+        )
 
 
 if __name__ == "__main__":

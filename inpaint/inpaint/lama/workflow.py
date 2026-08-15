@@ -298,7 +298,7 @@ def run_lama_video_inpaint(
         entries.append(
             LamaEntry(
                 index=mask_entry.index,
-                frame_filename=frame_entry.filename,
+                frame_filename=frame_entry.frame_filename,
                 timestamp_sec=frame_entry.timestamp_sec,
                 has_mask=mask_entry.has_mask,
                 mask_filename=mask_entry.mask_filename,

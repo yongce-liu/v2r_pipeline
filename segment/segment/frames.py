@@ -12,7 +12,7 @@ class FrameEntry:
     """One frame from the process manifest."""
 
     index: int
-    filename: str
+    frame_filename: str
     timestamp_sec: float | None
     path: Path
     """Absolute path to the frame image on disk."""
@@ -20,7 +20,7 @@ class FrameEntry:
     def to_dict(self) -> dict:
         return {
             "index": self.index,
-            "filename": self.filename,
+            "frame_filename": self.frame_filename,
             "timestamp_sec": self.timestamp_sec,
         }
 
@@ -69,13 +69,13 @@ def load_frame_manifest(frames_json: Path) -> FrameManifest:
     entries: list[FrameEntry] = []
     for raw in data.get("entries", []):
         index = int(raw["index"])
-        filename = raw["filename"]
+        frame_filename = raw["frame_filename"]
         entries.append(
             FrameEntry(
                 index=index,
-                filename=filename,
+                frame_filename=frame_filename,
                 timestamp_sec=raw.get("timestamp_sec"),
-                path=(frames_dir / filename).resolve(),
+                path=(frames_dir / frame_filename).resolve(),
             )
         )
     if not entries:

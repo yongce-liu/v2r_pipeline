@@ -21,7 +21,7 @@ _ASSET_XML = (
     / "unitree_g1_mjcf"
     / "g1_29dof_rev_1_0_with_inspire_hand_DFQ.xml"
 )
-_IK_CONFIG = _REPO_ROOT / "configs" / "egodex_g1_inspire_dfq.json"
+_IK_CONFIG = _REPO_ROOT / "configs" / "egodex_UnitreeG1InspireDfq.json"
 
 
 def _write_egodex_hdf5(path: Path, n_frames: int = 3) -> None:
@@ -63,7 +63,7 @@ def _write_frames_json(path: Path, n_frames: int, start_s: float = 0.0) -> None:
                 "entries": [
                     {
                         "index": i,
-                        "filename": f"frame_{i:06d}.png",
+                        "frame_filename": f"frame_{i:06d}.png",
                         "timestamp_sec": start_s + i / 30.0,
                     }
                     for i in range(n_frames)
@@ -85,10 +85,14 @@ def test_tyro_args_parse() -> None:
     assert args.frames_json is None
     assert args.vis is False
     assert args.mujoco is False
+    assert args.head_camera is False
+    assert args.head_camera_width == 640
+    assert args.head_camera_height == 480
+    assert args.head_camera_body == "d435_link"
 
 
 def test_vis_and_mujoco_flags_parse() -> None:
-    """--vis and --mujoco parse as booleans and appear in --help."""
+    """--vis, --mujoco and --head-camera parse and appear in --help."""
     result = subprocess.run(
         [sys.executable, "-m", "retarget.cli", "--help"],
         capture_output=True,
@@ -97,6 +101,9 @@ def test_vis_and_mujoco_flags_parse() -> None:
     assert result.returncode == 0
     assert "--vis" in result.stdout
     assert "--mujoco" in result.stdout
+    assert "--head-camera" in result.stdout
+    assert "--head-camera-body" in result.stdout
+    assert "--head-camera-quat" in result.stdout
 
 
 def test_cli_help_runs() -> None:

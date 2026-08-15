@@ -439,7 +439,7 @@ def run_video_depth(
         entries.append(
             DepthEntry(
                 index=frame.index,
-                frame_filename=frame.filename,
+                frame_filename=frame.frame_filename,
                 timestamp_sec=frame.timestamp_sec,
                 depth_filename=depth_filename,
                 vis_filename=vis_filename,

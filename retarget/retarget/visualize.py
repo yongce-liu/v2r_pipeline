@@ -8,6 +8,11 @@ retarget CLI:
   (no display, no GLFW), so it can be invoked in any environment.
 * ``--mujoco`` opens the interactive mujoco viewer and replays the trajectory
   on a loop until the user closes the window or hits Ctrl-C.
+* ``--head-camera`` renders per-frame first-person views from a camera mounted
+  on the robot's head (RGB PNGs plus float32 depth NPYs) into separate
+  ``head_camera_rgb/`` and ``head_camera_depth/`` subdirectories. The camera is
+  injected into a throwaway copy of the robot model, so the asset XML is never
+  modified.
 
 The replays work directly on the robot mujoco model, so ``--mujoco`` shows the
 same robot model that was retargeted. The saved qpos already holds the full
@@ -17,6 +22,9 @@ same robot model that was retargeted. The saved qpos already holds the full
 
 from __future__ import annotations
 
+import os
+import re
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,6 +34,24 @@ import numpy as np
 # Timestamps are dt-frames apart, but the viewer replay rates the motion at a
 # fixed fps so the motion is visible regardless of the source video cadence.
 PLAYBACK_FPS = 30
+
+HEAD_CAMERA_NAME = "head_camera"
+"""Name of the camera injected into the head-camera render model."""
+
+HEAD_CAMERA_LIGHT_NAME = "head_camera_light"
+"""Name of the world light injected so fixed-camera renders are visible."""
+
+HEAD_CAMERA_RGB_DIRNAME = "head_camera_rgb"
+"""Subdirectory (under the retarget output dir) holding per-frame RGB PNGs."""
+
+HEAD_CAMERA_DEPTH_DIRNAME = "head_camera_depth"
+"""Subdirectory (under the retarget output dir) holding per-frame depth NPYs."""
+
+# Unitree G1 front-camera mount: at the d435_link origin, looking along the
+# link's +x (the robot-forward axis). The retarget drives d435_link to follow
+# the human camera, so this yields a first-person view tilted slightly down.
+HEAD_CAMERA_DEFAULT_POS = (0.0, 0.0, 0.0)
+HEAD_CAMERA_DEFAULT_QUAT = (0.7071068, 0.0, -0.7071068, 0.0)
 
 
 @dataclass
@@ -111,6 +137,140 @@ def _write_video(
 def render_video(playback: Playback, output: Path) -> None:
     """Render the trajectory offscreen to ``output``."""
     _write_video(playback, output)
+
+
+def _format_floats(values: tuple[float, ...]) -> str:
+    return " ".join(f"{value:.9g}" for value in values)
+
+
+def _inject_world_light(xml: str) -> str:
+    """Add a fixed world light so fixed-camera renders are not pitch black."""
+    light = (
+        f'<light name="{HEAD_CAMERA_LIGHT_NAME}" pos="0 0 3" dir="0 0 -1" '
+        'diffuse="0.9 0.9 0.9" ambient="0.35 0.35 0.35"/>'
+    )
+    return re.sub(
+        r"<worldbody\b[^>]*>",
+        lambda match: match.group(0) + light,
+        xml,
+        count=1,
+    )
+
+
+def _inject_offscreen_buffer(xml: str, width: int, height: int) -> str:
+    """Grow the model's offscreen framebuffer to hold ``width`` x ``height``."""
+    global_clause = f'<global offwidth="{width}" offheight="{height}"/>'
+    # Models that already declare a <visual> keep their own buffer; the
+    # renderer clamps to it at render time instead of reordering clauses here.
+    if "<visual" in xml:
+        return xml
+    return xml.replace("</mujoco>", f"<visual>{global_clause}</visual></mujoco>")
+
+
+def build_head_camera_model(
+    robot_xml: Path,
+    *,
+    body_name: str = "d435_link",
+    pos: tuple[float, float, float] = HEAD_CAMERA_DEFAULT_POS,
+    quat: tuple[float, float, float, float] = HEAD_CAMERA_DEFAULT_QUAT,
+    width: int = 640,
+    height: int = 480,
+) -> tuple[object, int]:
+    """Load a render copy of ``robot_xml`` with a head camera injected.
+
+    The camera is mounted on ``body_name`` (default ``d435_link``) and follows
+    that body during replay. A throwaway XML is written next to the source so
+    relative mesh paths keep resolving; the source asset is never modified.
+
+    Returns ``(model, camera_id)``. The model has the same qpos layout as the
+    retarget model (cameras/lights do not change qpos), so any ``trajectory.npz``
+    written for the original model replays unchanged.
+    """
+    import mujoco as mj
+
+    robot_xml = Path(robot_xml)
+    if not robot_xml.is_file():
+        raise FileNotFoundError(f"robot_xml not found: {robot_xml}")
+
+    xml = robot_xml.read_text(encoding="utf-8")
+    body_pattern = re.compile(rf"<body\s+name=[\"']{re.escape(body_name)}[\"'][^>]*>")
+    if not body_pattern.search(xml):
+        raise ValueError(
+            f"body {body_name!r} not found in {robot_xml}; cannot mount the head camera"
+        )
+
+    camera_tag = (
+        f'<camera name="{HEAD_CAMERA_NAME}" pos="{_format_floats(pos)}" '
+        f'quat="{_format_floats(quat)}"/>'
+    )
+    xml = body_pattern.sub(lambda match: match.group(0) + camera_tag, xml, count=1)
+    xml = _inject_world_light(xml)
+    xml = _inject_offscreen_buffer(xml, width, height)
+
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=".head_camera_", suffix=".xml", dir=str(robot_xml.parent)
+    )
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(xml)
+        model = mj.MjModel.from_xml_path(str(tmp_path))
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    camera_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_CAMERA, HEAD_CAMERA_NAME)
+    return model, int(camera_id)
+
+
+def render_head_camera_frames(
+    playback: Playback,
+    camera_id: int,
+    rgb_dir: Path,
+    depth_dir: Path,
+    *,
+    width: int = 640,
+    height: int = 480,
+) -> None:
+    """Render first-person head-camera RGB PNGs and depth NPYs per frame.
+
+    ``playback`` must be built from the camera-injected model (see
+    :func:`build_head_camera_model`). RGB frames go to ``rgb_dir`` as
+    ``000000.png``-style images; depth frames go to ``depth_dir`` as float32
+    ``.npy`` arrays in meters (0 where nothing was hit).
+    """
+    import imageio.v2 as imageio
+    import mujoco as mj
+
+    rgb_dir.mkdir(parents=True, exist_ok=True)
+    depth_dir.mkdir(parents=True, exist_ok=True)
+
+    model = playback.model
+    n_frames = len(playback.qpos)
+    if n_frames == 0:
+        raise ValueError("No frames to render for the head camera")
+
+    # Clamp to the model's framebuffer (MuJoCo raises if the requested size
+    # exceeds it) when the source XML already declared its own <visual>.
+    width = min(width, model.vis.global_.offwidth)
+    height = min(height, model.vis.global_.offheight)
+
+    renderer = mj.Renderer(model, height=height, width=width)
+    camera = mj.MjvCamera()
+    camera.type = mj.mjtCamera.mjCAMERA_FIXED
+    camera.fixedcamid = camera_id
+
+    print(f"Rendering {n_frames} head-camera frame(s) -> {rgb_dir}, {depth_dir}")
+    try:
+        for frame_index in range(n_frames):
+            set_frame(playback, frame_index)
+            renderer.update_scene(playback.data, camera=camera)
+            imageio.imwrite(rgb_dir / f"{frame_index:06d}.png", renderer.render())
+            renderer.enable_depth_rendering()
+            depth = renderer.render().astype(np.float32)
+            renderer.disable_depth_rendering()
+            np.save(depth_dir / f"{frame_index:06d}.npy", depth)
+    finally:
+        renderer.close()
 
 
 def launch_viewer(playback: Playback) -> None:

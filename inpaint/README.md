@@ -2,14 +2,18 @@
 
 Hand/arm-removal inpainting for `v2r_pipeline`, run per frame and reading the
 `segment` stage's `masks.json` (which references the `process` stage's frame
-manifest). Two backends are available:
+manifest). Three backends are available:
 
 - **Qwen-Image-Edit** (default): the SAM3 hand/arm mask is painted over the
   frame with a solid color, Qwen-Image-Edit removes the hand/arm and completes
   the background; results go to `outputs/<clip>/inpaint/`.
 - **LaMa** (`big-lama` FFC generator): a lightweight CNN alternative, taking
-  the clean frame + real mask; results go to `outputs/<clip>/lama/`. See the
+  the clean frame + real mask; results go to `outputs/<clip>/inpaint/`. See the
   "LaMa backend" section below.
+- **ProPainter** (streaming video inpainting): RAFT optical flow + flow
+  completion + transformer, inpainting the whole clip in one pass so the fill
+  propagates across frames; results go to `outputs/<clip>/inpaint/`. See the
+  "ProPainter backend" section below.
 
 ## Install
 
@@ -21,7 +25,9 @@ uv sync
 ## Usage
 
 The CLI is two axes: `--command single|video` (one masked frame or every masked
-frame of a video) and `--backend qwen|lama` (which inpainting backend).
+frame of a video) and `--backend qwen|lama|propainter` (which inpainting
+backend). ProPainter is a whole-video backend, so it only supports
+`--command video`.
 
 Whole video with Qwen (frame-by-frame, reading the `segment` stage output):
 
@@ -220,6 +226,92 @@ uv run python -m inpaint.cli --command single --backend lama \
 - LaMa is trained on 256×256 images and generalizes to higher resolutions, but
   its fill of large holes is more conservative than Qwen's diffusion output. It
   is best used for fast iteration / comparison, not as a drop-in quality match.
+
+## ProPainter backend (`propainter`)
+
+A video-inpainting backend based on
+[ProPainter](https://github.com/sczhou/ProPainter), driven through the
+[`propainter`](https://github.com/osmr/propainter) pip package (the streaming
+reimplementation built on pytorchcv). Unlike the per-frame Qwen / LaMa
+backends, ProPainter inpaits the **whole clip in one pass** — RAFT optical flow
+and the recurrent flow completion network propagate appearance from neighboring
+frames into the hole, then the transformer refines it — so the fill keeps
+temporal consistency across the hand/arm region.
+
+```bash
+uv run python -m inpaint.cli --command video --backend propainter \
+    --video.masks-json ../outputs/0/segment/masks.json \
+    --video.vis --video.propainter.model-dir ../ckpts/propainter
+```
+
+The backend expects three sub-network checkpoints (pytorchcv format): RAFT
+(`raft-things.pth`), recurrent flow completion
+(`recurrent_flow_completion.pth`) and the ProPainter transformer
+(`ProPainter.pth`), all under `--<scope>.propainter.model-dir` (default
+`ckpts/propainter`).
+
+> **Checkpoint format note**: the backend loads local checkpoints when their
+> state dicts match the `propainter` pip package's pytorchcv networks. The
+> files shipped in `ckpts/propainter/` are exactly that format (RAFT, RFC and
+> ProPainter, auto-downloaded from the osmr model store on first use), so the
+> default `--<scope>.propainter.model-dir ckpts/propainter` runs fully offline.
+> If a configured checkpoint is instead in the *original* ProPainter-repo
+> (sczhou) format, the loader logs a warning and falls back to the package's
+> pretrained weights.
+
+All frames of the selected range are fed to the network; frames without a
+hand/arm mask pass a zero mask (kept pixel-exact by the output blending), so the
+output always has one image per source frame in the same
+`outputs/<clip>/inpaint/` layout as the other backends.
+
+### Options
+
+- `--<scope>.propainter.model-dir <path>` — directory with the three
+  checkpoints (default `ckpts/propainter`); `None` disables local checkpoints.
+- `--<scope>.propainter.raft-model-path / .pprfc-model-path / .pp-model-path
+  <path>` — per-network checkpoint overrides.
+- `--<scope>.propainter.device auto|cuda[:N]|cpu` — torch device (default `auto`).
+- `--<scope>.propainter.resize-ratio <F>` — network input scale (default `1.0`).
+- `--<scope>.propainter.mask-dilation <N>` — network-input mask dilation in px
+  (default `4`, must be > 0).
+- `--<scope>.propainter.post-raw-mask-dilation <N>` — extra dilation for output
+  blending; pixels outside it are copied back from the original frame (default
+  `5`; `0` returns the raw network output).
+- `--<scope>.propainter.step <N>` — frames per streaming iteration (default `10`).
+- `--<scope>.propainter.overwrite` / `--<scope>.propainter.no-overwrite` —
+  recompute vs. reuse outputs when every frame is already done.
+
+### Notes
+
+- The backend only supports `--command video`; `--backend propainter` with
+  `--command single` raises an error.
+- ProPainter is the most compute-heavy backend (three networks over the whole
+  clip); `--video.max-frames` truncates the processed range.
+
+### Memory
+
+The three checkpoints are small (~200 MB total), but ProPainter's **intermediate
+activations** dominate VRAM: the transformer attends over a whole
+`pp_window_size` frame window at once, and at 1080p each frame is ~32k tokens,
+so the default window (80 frames) can exceed 30 GB. Measured on a 32 GB GPU
+with a 94-frame 1080p clip:
+
+- `resize-ratio 1.0` (default) → OOM (>30 GB peak).
+- `resize-ratio 0.5` → ~17.6 GB peak, ~34 s of inference. The output is still
+  full-resolution: the streaming package inverts the network output back to the
+  original size and blends it with the raw frames outside the mask.
+
+So for 1080p input, run:
+
+```bash
+uv run python -m inpaint.cli --command video --backend propainter \
+    --video.masks-json outputs/0/segment/masks.json --video.vis \
+    --video.propainter.resize-ratio 0.5
+```
+
+Keep the default `pp-window-size`/`pp-stride` (the package's window-index math
+is picky about non-default combinations on short clips). If a run still hits
+CUDA OOM, the backend now reports a hint to lower `resize-ratio` further.
 
 ## Notes on the NVFP4 checkpoint
 

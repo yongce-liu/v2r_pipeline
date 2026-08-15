@@ -41,6 +41,7 @@ from inpaint.media import (
     save_image,
     save_side_by_side,
 )
+from inpaint.propainter.args import ProPainterInpaintArgs
 from inpaint.qwen.inpainter import QwenInpaintArgs, QwenInpainter
 
 INPAINT_FILENAME_PATTERN = "{:06d}.png"
@@ -53,8 +54,8 @@ DEFAULT_MASK_COLOR_RGB = (0, 0, 255)
 class InpaintVideoArgs:
     """Arguments for frame-by-frame inpainting of a whole video.
 
-    Shared by both backends; ``qwen`` / ``lama`` hold the backend-specific
-    settings (selected by ``--backend``).
+    Shared by all backends; ``qwen`` / ``lama`` / ``propainter`` hold the
+    backend-specific settings (selected by ``--backend``).
     """
 
     masks_json: Path | None = None
@@ -80,6 +81,9 @@ class InpaintVideoArgs:
 
     lama: LamaInpaintArgs = field(default_factory=LamaInpaintArgs)
     """LaMa settings (used when ``--backend lama``)."""
+
+    propainter: ProPainterInpaintArgs = field(default_factory=ProPainterInpaintArgs)
+    """ProPainter settings (used when ``--backend propainter``)."""
 
 
 @dataclass(frozen=True)
@@ -344,7 +348,7 @@ def run_video_inpaint(
         entries.append(
             InpaintEntry(
                 index=mask_entry.index,
-                frame_filename=frame_entry.filename,
+                frame_filename=frame_entry.frame_filename,
                 timestamp_sec=frame_entry.timestamp_sec,
                 has_mask=mask_entry.has_mask,
                 mask_filename=mask_entry.mask_filename,
