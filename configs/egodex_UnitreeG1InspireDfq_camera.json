@@ -1,0 +1,156 @@
+{
+  "robot_root_name": "d435_link",
+  "human_root_name": "camera",
+  "ground_height": 0.0,
+  "human_height_assumption": 1.7,
+  "use_ik_match_table1": true,
+  "use_ik_match_table2": true,
+  "human_scale_table": {
+    "camera": 0.8,
+    "spine3": 0.8,
+    "leftArm": 0.8,
+    "leftForearm": 0.8,
+    "leftHand": 0.8,
+    "rightArm": 0.8,
+    "rightForearm": 0.8,
+    "rightHand": 0.8
+  },
+  "ik_match_table1": {
+    "d435_link": [
+      "camera",
+      100,
+      20,
+      [0.0, 0.0, 0.0],
+      [0.1736482, 0, 0.9848078, 0]
+    ],
+    "torso_link": ["spine3", 20, 0, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
+    "left_shoulder_yaw_link": [
+      "leftArm",
+      10,
+      0,
+      [0.0, 0.0, 0.0],
+      [1.0, 0.0, 0.0, 0.0]
+    ],
+    "left_elbow_link": [
+      "leftForearm",
+      20,
+      0,
+      [0.0, 0.0, 0.0],
+      [1.0, 0.0, 0.0, 0.0]
+    ],
+    "left_wrist_yaw_link": [
+      "leftHand",
+      80,
+      80,
+      [0.0, 0.0, 0.0],
+      [0.0007974191, -0.0361829254, -0.0000053374, 0.9993448654]
+    ],
+    "right_shoulder_yaw_link": [
+      "rightArm",
+      10,
+      0,
+      [0.0, 0.0, 0.0],
+      [1.0, 0.0, 0.0, 0.0]
+    ],
+    "right_elbow_link": [
+      "rightForearm",
+      20,
+      0,
+      [0.0, 0.0, 0.0],
+      [1.0, 0.0, 0.0, 0.0]
+    ],
+    "right_wrist_yaw_link": [
+      "rightHand",
+      80,
+      80,
+      [0.0, 0.0, 0.0],
+      [0.0007974191, 0.0361829254, -0.0000053374, -0.9993448654]
+    ]
+  },
+  "ik_match_table2": {
+    "d435_link": [
+      "camera",
+      100,
+      20,
+      [0.0, 0.0, 0.0],
+      [0.1736482, 0, 0.9848078, 0]
+    ],
+    "torso_link": ["spine3", 20, 0, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
+    "left_shoulder_yaw_link": [
+      "leftArm",
+      10,
+      0,
+      [0.0, 0.0, 0.0],
+      [1.0, 0.0, 0.0, 0.0]
+    ],
+    "left_elbow_link": [
+      "leftForearm",
+      20,
+      0,
+      [0.0, 0.0, 0.0],
+      [1.0, 0.0, 0.0, 0.0]
+    ],
+    "left_wrist_yaw_link": [
+      "leftHand",
+      80,
+      80,
+      [0.0, 0.0, 0.0],
+      [0.0007974191, -0.0361829254, -0.0000053374, 0.9993448654]
+    ],
+    "right_shoulder_yaw_link": [
+      "rightArm",
+      10,
+      0,
+      [0.0, 0.0, 0.0],
+      [1.0, 0.0, 0.0, 0.0]
+    ],
+    "right_elbow_link": [
+      "rightForearm",
+      20,
+      0,
+      [0.0, 0.0, 0.0],
+      [1.0, 0.0, 0.0, 0.0]
+    ],
+    "right_wrist_yaw_link": [
+      "rightHand",
+      80,
+      80,
+      [0.0, 0.0, 0.0],
+      [0.0007974191, 0.0361829254, -0.0000053374, -0.9993448654]
+    ]
+  },
+  "dex_hand_config": {
+    "robot_name": "inspire",
+    "retargeting_type": "dexpilot",
+    "urdf_dir": "assets/dex-urdf/robots/hands",
+    "confidence_threshold": -1.0,
+    "hand_names": ["left", "right"],
+    "mano_keypoint_names": [
+      "Hand",
+      "ThumbKnuckle",
+      "ThumbIntermediateBase",
+      "ThumbIntermediateTip",
+      "ThumbTip",
+      "IndexFingerKnuckle",
+      "IndexFingerIntermediateBase",
+      "IndexFingerIntermediateTip",
+      "IndexFingerTip",
+      "MiddleFingerKnuckle",
+      "MiddleFingerIntermediateBase",
+      "MiddleFingerIntermediateTip",
+      "MiddleFingerTip",
+      "RingFingerKnuckle",
+      "RingFingerIntermediateBase",
+      "RingFingerIntermediateTip",
+      "RingFingerTip",
+      "LittleFingerKnuckle",
+      "LittleFingerIntermediateBase",
+      "LittleFingerIntermediateTip",
+      "LittleFingerTip"
+    ],
+    "output_joint_prefixes": {
+      "left": "L_",
+      "right": "R_"
+    }
+  }
+}

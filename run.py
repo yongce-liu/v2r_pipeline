@@ -10,4 +10,5 @@
 04: retarget
     retarget/.venv/bin/python -m retarget --input inputs/0.hdf5 --ik-config configs/egodex_g1_inspire_dfq.json --frames-json outputs/0/process/frames.json --vis
 05: recamera
+    recamera/.venv/bin/python -m recamera.cli --input outputs/0
 """
