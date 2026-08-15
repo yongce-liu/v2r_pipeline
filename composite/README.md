@@ -72,6 +72,18 @@ gap-filled over a short temporal window (per-frame fits are kept, only missing
 fits inherit their neighbours). `--feather-px` softens the silhouette edge and
 `--depth-margin-frac` controls the show-the-arm bias.
 
+## Poisson blending
+
+The robot render (MuJoCo) and the inpainted camera frames come from different
+render pipelines, so the composited arm can look uniformly brighter or darker
+than the scene — two different "exposures" stacked on top of each other.
+Before the alpha mix, the visible arm is therefore fused into the scene with a
+gradient-domain blend (`cv2.seamlessClone`, Poisson reconstruction): the arm
+keeps its interior shading and texture while its overall brightness and color
+are pushed to be continuous with the background at the silhouette, so the arm
+reads as being lit by the scene instead of sitting on top of it. Disable with
+`--no-poisson-blend` to paste the raw render with only the alpha feather.
+
 Without `--calibration-depth-json` the step falls back to plain mask
 compositing (no depth matching) and logs a warning. To enable it, produce the
 calibration depth with the existing depth stage on the original frames:
@@ -93,4 +105,6 @@ cd depth && uv run python -m depth.cli --video.frames-json \
 - `--overwrite` — clear an existing `composite` workspace and re-run (default on).
 - `--max-frames <n>` — limit the number of frames processed.
 - `--feather-px <n>` / `--depth-margin-frac <f>` — silhouette feathering and depth margin.
+- `--poisson-blend` / `--no-poisson-blend` — gradient-domain fusion of the arm
+  into the scene before the alpha mix (default on).
 - `--smooth-window <n>` / `--max-corr-samples <n>` / `--calibration-erode-px <n>` — calibration tuning.

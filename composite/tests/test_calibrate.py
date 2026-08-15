@@ -92,7 +92,7 @@ def test_calibration_and_composite_depth_matching() -> None:
     ]
     assert np.allclose(mapped, 1.8, atol=0.1)
 
-    out, _, fraction, n_arm, _ = composite_frame(
+    out, _, fraction, n_arm, _, poisson_applied = composite_frame(
         f["inpainted_rgb"],
         f["robot_rgb"],
         f["robot_depth"],
@@ -100,6 +100,7 @@ def test_calibration_and_composite_depth_matching() -> None:
         calib,
         margin_frac=0.0,
         feather_px=0,
+        poisson_blend=False,
     )
     arm_pixels = (3 * 80 // 4 - 80 // 4) * (3 * 100 // 4 - 100 // 4)
     assert n_arm == arm_pixels
@@ -111,11 +112,12 @@ def test_calibration_and_composite_depth_matching() -> None:
     assert np.all(out[arm_white] == (255, 255, 255))
     assert np.all(out[f["occluder_slice"]] == (10, 200, 10))
     assert 0.8 < fraction < 0.95
+    assert not poisson_applied
 
 
 def test_composite_fallback_mask_without_calibration() -> None:
     f = _synthetic_frame()
-    out, _, fraction, n_arm, n_visible = composite_frame(
+    out, _, fraction, n_arm, n_visible, _ = composite_frame(
         f["inpainted_rgb"],
         f["robot_rgb"],
         f["robot_depth"],
@@ -123,7 +125,74 @@ def test_composite_fallback_mask_without_calibration() -> None:
         None,
         margin_frac=0.0,
         feather_px=0,
+        poisson_blend=False,
     )
     assert n_visible == n_arm
     assert fraction == 1.0
     assert np.all(out[f["arm_slice"]] == (255, 255, 255))
+
+
+def test_poisson_blend_melts_arm_into_scene() -> None:
+    """A uniformly brighter arm is fused to the scene's brightness."""
+
+    h, w = 80, 100
+    arm_slice = (slice(20, 60), slice(25, 75))
+    robot_depth = np.full((h, w), 70.0, dtype=np.float32)
+    robot_depth[arm_slice] = 0.4
+    robot_rgb = np.full((h, w, 3), 50, dtype=np.uint8)
+    robot_rgb[arm_slice] = 150
+    inpainted_rgb = np.full((h, w, 3), 50, dtype=np.uint8)
+    scene_inp = np.full((h, w), 1.0, dtype=np.float32)
+
+    out, _, _, _, _, poisson_applied = composite_frame(
+        inpainted_rgb,
+        robot_rgb,
+        robot_depth,
+        scene_inp,
+        None,
+        margin_frac=0.0,
+        feather_px=0,
+    )
+    assert poisson_applied
+    core = out[38:42, 48:52].astype(int)
+    bg = out[5:10, 5:10].astype(int)
+    # The 100-level brightness jump collapses to a smooth, small gap.
+    assert abs(int(core.mean()) - int(bg.mean())) < 25
+
+
+def test_poisson_blend_disabled_pastes_raw_render() -> None:
+    f = _synthetic_frame()
+    out, _, _, _, _, poisson_applied = composite_frame(
+        f["inpainted_rgb"],
+        f["robot_rgb"],
+        f["robot_depth"],
+        f["scene_inp"],
+        None,
+        margin_frac=0.0,
+        feather_px=0,
+        poisson_blend=False,
+    )
+    assert not poisson_applied
+    assert np.all(out[f["arm_slice"]] == (255, 255, 255))
+
+
+def test_poisson_blend_default_on_within_composite() -> None:
+    """The default composite run applies the Poisson fusion and reports it."""
+
+    h, w = 80, 100
+    arm_slice = (slice(20, 60), slice(25, 75))
+    robot_depth = np.full((h, w), 70.0, dtype=np.float32)
+    robot_depth[arm_slice] = 0.4
+    robot_rgb = np.full((h, w, 3), 120, dtype=np.uint8)
+    robot_rgb[arm_slice] = 80
+    inpainted_rgb = np.full((h, w, 3), 120, dtype=np.uint8)
+    scene_inp = np.full((h, w), 1.0, dtype=np.float32)
+
+    out, _, _, _, _, poisson_applied = composite_frame(
+        inpainted_rgb, robot_rgb, robot_depth, scene_inp, None
+    )
+    assert poisson_applied
+    core = out[38:42, 48:52].astype(int)
+    bg = out[5:10, 5:10].astype(int)
+    # The dimmer arm is pulled up to the scene's brightness.
+    assert abs(int(core.mean()) - int(bg.mean())) < 15

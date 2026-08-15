@@ -38,12 +38,28 @@ def _read_json(path: Path) -> dict:
 
 
 def _resolve(path_value: str | None, base_dir: Path) -> Path | None:
+    """Resolve a manifest-embedded path against ``base_dir`` (manifest dir).
+
+    Absolute paths pass through. Relative paths are tried first relative to
+    the manifest itself (the bare-directory convention used by
+    ``retarget/camera.json``), then relative to the current working directory
+    (some depth manifests record paths like ``outputs/<clip>/depth_orig/depths``
+    relative to the pipeline root). The manifest-relative candidate wins when
+    both exist so the documented convention keeps priority.
+    """
+
     if not path_value:
         return None
     path = Path(path_value).expanduser()
-    if not path.is_absolute():
-        path = base_dir / path
-    return path
+    if path.is_absolute():
+        return path
+    relative_to_manifest = base_dir / path
+    if relative_to_manifest.exists():
+        return relative_to_manifest
+    relative_to_cwd = Path.cwd() / path
+    if relative_to_cwd.exists():
+        return relative_to_cwd
+    return relative_to_manifest
 
 
 def _entries_by_index(raw_entries: list) -> dict[int, dict]:

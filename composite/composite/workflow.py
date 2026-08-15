@@ -102,6 +102,14 @@ class CompositeArgs:
     """Erode the arm mask by this many pixels before sampling arm
     correspondences (avoids misaligned arm/hand boundary pixels)."""
 
+    poisson_blend: bool = True
+    """Gradient-domain fusion of the arm into the scene before the alpha mix.
+    ``cv2.seamlessClone`` keeps the arm's interior shading/texture while
+    pushing its overall exposure and white balance to match the background at
+    the silhouette, so the two layers no longer look like different
+    exposures. Disable with ``--no-poisson-blend`` to paste the raw render
+    with the alpha feather only."""
+
 
 @dataclass(frozen=True)
 class CompositeOutputs:
@@ -336,6 +344,7 @@ def _config_dict(args: CompositeArgs, frames: list[dict]) -> dict:
             "max_frames": args.max_frames,
             "feather_px": args.feather_px,
             "depth_margin_frac": args.depth_margin_frac,
+            "poisson_blend": args.poisson_blend,
             "smooth_window": args.smooth_window,
             "max_corr_samples": args.max_corr_samples,
             "calibration_erode_px": args.calibration_erode_px,
@@ -451,7 +460,7 @@ def run_composite(args: CompositeArgs) -> CompositeOutputs:
         scene_inp = np.load(scene_depth.depth_path(scene_entry))
 
         calibration = calibrations[position]
-        out, _, visible_fraction, n_arm, n_visible = composite_frame(
+        out, _, visible_fraction, n_arm, n_visible, poisson_applied = composite_frame(
             inpainted_rgb,
             robot_rgb,
             robot_depth,
@@ -459,6 +468,7 @@ def run_composite(args: CompositeArgs) -> CompositeOutputs:
             calibration,
             margin_frac=args.depth_margin_frac,
             feather_px=args.feather_px,
+            poisson_blend=args.poisson_blend,
         )
 
         output_filename = OUTPUT_FILENAME_PATTERN.format(index)
@@ -485,6 +495,7 @@ def run_composite(args: CompositeArgs) -> CompositeOutputs:
                 "arm_pixels": n_arm,
                 "visible_pixels": n_visible,
                 "visible_fraction": round(visible_fraction, 4),
+                "poisson_applied": poisson_applied,
                 "calibration": (
                     {
                         "slope": calibration.slope,
@@ -531,6 +542,7 @@ def run_composite(args: CompositeArgs) -> CompositeOutputs:
         "frame_format": "png",
         "frame_count": len(entries),
         "depth_matching_enabled": depth_matching,
+        "poisson_blending_enabled": args.poisson_blend,
         "frames_dir": str(frames_dir),
         "frames_vis_dir": str(frames_vis_dir) if frames_vis_dir is not None else None,
         "video_filename": VIDEO_FILENAME if args.video else None,

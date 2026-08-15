@@ -233,6 +233,7 @@ def test_run_composite_with_calibration(stage) -> None:
         smooth_window=1,
         max_corr_samples=None,
         calibration_erode_px=0,
+        poisson_blend=False,
     )
     outputs = run_composite(args)
 
@@ -272,6 +273,7 @@ def test_run_composite_fallback_without_calibration(stage) -> None:
         overwrite=True,
         feather_px=0,
         smooth_window=1,
+        poisson_blend=False,
     )
     outputs = run_composite(args)
     manifest = json.loads(outputs.composite_json_path.read_text(encoding="utf-8"))

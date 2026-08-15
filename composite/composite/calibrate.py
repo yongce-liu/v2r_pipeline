@@ -140,6 +140,39 @@ class FrameCalibration:
         )
 
 
+def _poisson_blend(
+    robot_rgb: np.ndarray,
+    inpainted_rgb: np.ndarray,
+    visible: np.ndarray,
+    *,
+    min_area: int = 64,
+) -> np.ndarray:
+    """Gradient-domain blend of the robot layer into the scene.
+
+    ``cv2.seamlessClone`` solves a Poisson equation over the visible arm: the
+    result keeps the arm's interior gradients (its shading and texture) while
+    the low-frequency brightness and color are pushed to be continuous with
+    the background at the silhouette. This is the standard way to fuse a
+    render whose exposure/white balance differs from the photographed scene —
+    the arm reads as being lit by the scene instead of sitting on top of it.
+
+    Falls back to the raw render when the visible region is too small or the
+    solver fails.
+    """
+
+    if visible.sum() < min_area:
+        return robot_rgb
+    mask = (visible.astype(np.uint8)) * 255
+    ys, xs = np.nonzero(visible)
+    center = (round(float(xs.mean())), round(float(ys.mean())))
+    try:
+        return cv2.seamlessClone(
+            robot_rgb, inpainted_rgb, mask, center, cv2.NORMAL_CLONE
+        )
+    except cv2.error:
+        return robot_rgb
+
+
 def calibrate_frame(
     robot_depth: np.ndarray,
     scene_orig: np.ndarray,
@@ -234,10 +267,14 @@ def composite_frame(
     *,
     margin_frac: float = 0.02,
     feather_px: int = 3,
-) -> tuple[np.ndarray, np.ndarray, float, int, int]:
+    poisson_blend: bool = True,
+) -> tuple[np.ndarray, np.ndarray, float, int, int, bool]:
     """Blend the robot arm into the inpainted frame using depth.
 
-    Returns ``(composited_rgb, alpha, visible_fraction, n_arm, n_visible)``.
+    Returns ``(composited_rgb, alpha, visible_fraction, n_arm, n_visible,
+    poisson_applied)`` where ``poisson_applied`` reports whether the
+    gradient-domain fusion ran on this frame.
+
     When ``calibration`` is ``None`` (no original-frame depth available) the
     arm is composited with a plain mask — depth matching is skipped and the
     caller should log that limitation.
@@ -247,6 +284,13 @@ def composite_frame(
     (``arm_scene > scene + margin``). Near-ties, which are within depth-noise
     of each other, keep the arm visible because the arm is the subject of the
     frame.
+
+    ``poisson_blend`` fuses the arm's brightness and color into the scene
+    with a gradient-domain blend (``cv2.seamlessClone``) before the alpha
+    mixing: the arm keeps its interior shading/texture while its overall
+    exposure and white balance are pushed to match the background at the
+    silhouette, removing the "two different exposures" look. Disable it to
+    paste the raw render with the alpha feather only.
     """
 
     inpainted = inpainted_rgb.astype(np.float32, copy=False)
@@ -273,6 +317,12 @@ def composite_frame(
         kernel = (2 * feather_px + 1, 2 * feather_px + 1)
         alpha = cv2.GaussianBlur(alpha, kernel, 0)
 
+    poisson_applied = False
+    if poisson_blend and alpha.any():
+        robot = _poisson_blend(robot_rgb, inpainted_rgb, alpha > 0.5)
+        robot = robot.astype(np.float32, copy=False)
+        poisson_applied = True
+
     n_arm = int(arm.sum())
     n_visible = int((alpha > 0.5).sum())
     visible_fraction = n_visible / n_arm if n_arm else 0.0
@@ -282,4 +332,4 @@ def composite_frame(
         alpha_b = alpha[..., None]
         blended = alpha_b * robot + (1.0 - alpha_b) * inpainted
     out = np.clip(blended, 0, 255).astype(np.uint8)
-    return out, alpha, visible_fraction, n_arm, n_visible
+    return out, alpha, visible_fraction, n_arm, n_visible, poisson_applied

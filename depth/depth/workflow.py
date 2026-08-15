@@ -69,7 +69,7 @@ class DepthVideoArgs:
     frames_json: Path | None = None
     """Path to the ``process`` stage's ``frames.json`` (required for video mode)."""
 
-    output_root: Path = Path(__file__).parents[2] / "outputs"
+    output_root: Path | None = None
     """Root under which ``<clip_stem>/depth/`` is created."""
 
     vis: bool = True
@@ -121,7 +121,6 @@ class DepthEntry:
 class DepthVideoOutputs:
     """Everything produced by one video depth run."""
 
-    clip_root: Path
     stage_dir: Path
     depths_dir: Path
     depths_vis_dir: Path | None
@@ -376,8 +375,12 @@ def run_video_depth(
     manifest = load_frame_manifest(frames_json)
 
     clip_stem = frames_json.parent.parent.name  # outputs/<clip>/process/frames.json
-    clip_root = args.output_root.expanduser().resolve() / clip_stem
-    stage_dir = clip_root / "depth"
+    stage_dir = (
+        args.output_root
+        or (Path(__file__).parents[2] / "outputs").expanduser().resolve()
+        / clip_stem
+        / "depth"
+    )
     depths_dir = stage_dir / "depths"
     depths_vis_dir = stage_dir / "depths_vis" if args.vis else None
     aggregate_path = stage_dir / f"depth.{args.aggregate_format}"
@@ -474,7 +477,6 @@ def run_video_depth(
     )
 
     return DepthVideoOutputs(
-        clip_root=clip_root,
         stage_dir=stage_dir,
         depths_dir=depths_dir,
         depths_vis_dir=depths_vis_dir,
