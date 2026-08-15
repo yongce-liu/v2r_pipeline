@@ -8,7 +8,7 @@
 03: depth
     depth/.venv/bin/python -m depth.cli --video.frames-json outputs/0/inpaint/inpainted.json --video.vis
 04: retarget
-    retarget/.venv/bin/python -m retarget --input inputs/0.hdf5 --ik-config configs/egodex_UnitreeG1InspireDfq_camera.json --frames-json outputs/0/process/frames.json --vis --head-camera
+    retarget/.venv/bin/python -m retarget --input inputs/0.hdf5 --ik-config configs/egodex_UnitreeG1InspireDfq_camera.json --frames-json outputs/0/process/frames.json --third-person-vis
 06: rerender (depth composite)
 
 """

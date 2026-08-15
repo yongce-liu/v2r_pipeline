@@ -15,12 +15,12 @@ from pathlib import Path
 import mujoco as mj
 
 from retarget.visualize import (
-    HEAD_CAMERA_DEPTH_DIRNAME,
-    HEAD_CAMERA_NAME,
-    HEAD_CAMERA_RGB_DIRNAME,
-    build_head_camera_model,
+    CAMERA_DEPTH_DIRNAME,
+    CAMERA_NAME,
+    CAMERA_RGB_DIRNAME,
+    build_camera_model,
     load_playback,
-    render_head_camera_frames,
+    render_camera_frames,
     render_video,
     set_frame,
 )
@@ -120,13 +120,13 @@ def _write_synthetic_xml(tmp_path: Path) -> Path:
     return xml_path
 
 
-def test_build_head_camera_model_injects_camera(tmp_path) -> None:
+def test_build_camera_model_injects_camera(tmp_path) -> None:
     xml_path = _write_synthetic_xml(tmp_path)
-    model, camera_id = build_head_camera_model(
+    model, camera_id = build_camera_model(
         xml_path, body_name="link2", width=320, height=240
     )
     assert model.ncam == 1
-    assert mj.mj_id2name(model, mj.mjtObj.mjOBJ_CAMERA, camera_id) == HEAD_CAMERA_NAME
+    assert mj.mj_id2name(model, mj.mjtObj.mjOBJ_CAMERA, camera_id) == CAMERA_NAME
     body_id = model.cam_bodyid[camera_id]
     assert mj.mj_id2name(model, mj.mjtObj.mjOBJ_BODY, body_id) == "link2"
     assert model.vis.global_.offwidth == 320
@@ -135,27 +135,27 @@ def test_build_head_camera_model_injects_camera(tmp_path) -> None:
     assert model.nq == mj.MjModel.from_xml_string(_synthetic_model_xml()).nq
 
 
-def test_build_head_camera_model_rejects_missing_body(tmp_path) -> None:
+def test_build_camera_model_rejects_missing_body(tmp_path) -> None:
     xml_path = _write_synthetic_xml(tmp_path)
     with pytest.raises(ValueError, match="missing_body"):
-        build_head_camera_model(xml_path, body_name="missing_body")
+        build_camera_model(xml_path, body_name="missing_body")
 
 
-def test_render_head_camera_frames_writes_rgb_and_depth(tmp_path) -> None:
+def test_render_camera_frames_writes_rgb_and_depth(tmp_path) -> None:
     path = _synthetic_trajectory(tmp_path, n_frames=4)
 
     xml_path = _write_synthetic_xml(tmp_path)
-    camera_model, camera_id = build_head_camera_model(
-        xml_path, body_name="link2", width=160, height=120
+    camera_model, camera_id = build_camera_model(
+        xml_path, body_name="link2", width=160, height=128
     )
     camera_playback = load_playback(camera_model, path)
-    rgb_dir = tmp_path / HEAD_CAMERA_RGB_DIRNAME
-    depth_dir = tmp_path / HEAD_CAMERA_DEPTH_DIRNAME
-    render_head_camera_frames(
+    rgb_dir = tmp_path / CAMERA_RGB_DIRNAME
+    depth_dir = tmp_path / CAMERA_DEPTH_DIRNAME
+    depth_stats = render_camera_frames(
         camera_playback,
         camera_id,
         rgb_dir,
-        depth_dir,
+        depth_dir=depth_dir,
         width=160,
         height=120,
     )
@@ -172,22 +172,45 @@ def test_render_head_camera_frames_writes_rgb_and_depth(tmp_path) -> None:
     depth = np.load(depth_dir / "000000.npy")
     assert depth.shape == (120, 160)
     assert depth.dtype == np.float32
+    assert len(depth_stats) == 4
+    assert depth_stats[0]["depth_filename"] == "000000.npy"
+    assert depth_stats[0]["depth_min"] <= depth_stats[0]["depth_mean"]
+    assert depth_stats[0]["depth_mean"] <= depth_stats[0]["depth_max"]
 
 
-def test_render_head_camera_frames_rejects_empty_trajectory(tmp_path) -> None:
+def test_render_camera_frames_skips_depth_by_default(tmp_path) -> None:
+    """Without depth_dir only RGB PNGs are written and no stats are returned."""
+    path = _synthetic_trajectory(tmp_path, n_frames=2)
+
+    xml_path = _write_synthetic_xml(tmp_path)
+    camera_model, camera_id = build_camera_model(
+        xml_path, body_name="link2", width=160, height=120
+    )
+    camera_playback = load_playback(camera_model, path)
+    rgb_dir = tmp_path / CAMERA_RGB_DIRNAME
+    depth_stats = render_camera_frames(
+        camera_playback, camera_id, rgb_dir, width=160, height=120
+    )
+
+    assert len(list(rgb_dir.glob("*.png"))) == 2
+    assert not (tmp_path / CAMERA_DEPTH_DIRNAME).exists()
+    assert depth_stats is None
+
+
+def test_render_camera_frames_rejects_empty_trajectory(tmp_path) -> None:
     empty = tmp_path / "empty.npz"
     np.savez(empty, qpos=np.zeros((0, 9)))
     xml_path = _write_synthetic_xml(tmp_path)
-    camera_model, camera_id = build_head_camera_model(
+    camera_model, camera_id = build_camera_model(
         xml_path, body_name="link2", width=160, height=120
     )
     camera_playback = load_playback(camera_model, empty)
     with pytest.raises(ValueError, match="No frames"):
-        render_head_camera_frames(
+        render_camera_frames(
             camera_playback,
             camera_id,
             tmp_path / "rgb",
-            tmp_path / "depth",
+            depth_dir=tmp_path / "depth",
             width=160,
             height=120,
         )

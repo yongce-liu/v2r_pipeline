@@ -83,27 +83,22 @@ def test_tyro_args_parse() -> None:
     assert args.robot_xml is None  # falls back to ikconfig's robot_xml
     assert args.output_dir is None
     assert args.frames_json is None
-    assert args.vis is False
+    assert args.third_person_vis is False
     assert args.mujoco is False
-    assert args.head_camera is False
-    assert args.head_camera_width == 640
-    assert args.head_camera_height == 480
-    assert args.head_camera_body == "d435_link"
 
 
 def test_vis_and_mujoco_flags_parse() -> None:
-    """--vis, --mujoco and --head-camera parse and appear in --help."""
+    """--third-person-vis and --mujoco parse and appear in --help; the old
+    head-camera args are gone."""
     result = subprocess.run(
         [sys.executable, "-m", "retarget.cli", "--help"],
         capture_output=True,
         text=True,
     )
     assert result.returncode == 0
-    assert "--vis" in result.stdout
+    assert "--third-person-vis" in result.stdout
     assert "--mujoco" in result.stdout
-    assert "--head-camera" in result.stdout
-    assert "--head-camera-body" in result.stdout
-    assert "--head-camera-quat" in result.stdout
+    assert "--head-camera" not in result.stdout
 
 
 def test_cli_help_runs() -> None:
@@ -294,3 +289,227 @@ def test_load_frame_timestamps_null_falls_back_to_index(tmp_path: Path) -> None:
 
     timestamps = load_frame_timestamps(path)
     np.testing.assert_allclose(timestamps, [0.0, 1.0])
+
+
+def test_load_camera_config_normalizes_schema() -> None:
+    """The ik-config camera entry is normalized into render options."""
+    from retarget.cli import load_camera_config
+
+    cfg = load_camera_config(
+        {
+            "camera": {
+                "link": "d435_link",
+                "pos_offset": [0.1, 0.2, 0.3],
+                "orn_offset": [0.1736482, 0, 0.9848078, 0],
+                "width": 320,
+                "height": 240,
+                "depth": True,
+            }
+        }
+    )
+    assert cfg == {
+        "link": "d435_link",
+        "pos_offset": (0.1, 0.2, 0.3),
+        "orn_offset": (0.1736482, 0.0, 0.9848078, 0.0),
+        "width": 320,
+        "height": 240,
+        "depth": True,
+    }
+
+
+def test_load_camera_config_defaults_and_absence() -> None:
+    """Missing camera -> None; optional camera keys default sensibly."""
+    from retarget.cli import load_camera_config
+
+    assert load_camera_config({"human_root_name": "hip"}) is None
+    cfg = load_camera_config({"camera": {"link": "pelvis"}})
+    assert cfg is not None
+    assert cfg["pos_offset"] == (0.0, 0.0, 0.0)
+    assert cfg["orn_offset"] == (1.0, 0.0, 0.0, 0.0)
+    # Width/height are None so the caller infers them from the source video.
+    assert cfg["width"] is None
+    assert cfg["height"] is None
+    assert cfg["depth"] is False
+
+
+def test_load_camera_config_rejects_bad_schema() -> None:
+    """A camera entry without a link, or with malformed offsets, is rejected."""
+    from retarget.cli import load_camera_config
+
+    with pytest.raises(ValueError, match="link"):
+        load_camera_config({"camera": {"pos_offset": [0, 0, 0]}})
+    with pytest.raises(ValueError, match="pos_offset"):
+        load_camera_config({"camera": {"link": "pelvis", "pos_offset": [0, 0]}})
+    with pytest.raises(ValueError, match="orn_offset"):
+        load_camera_config({"camera": {"link": "pelvis", "orn_offset": [1, 0, 0]}})
+
+
+def test_camera_intrinsics_match_resolution() -> None:
+    """The manifest intrinsics are square-pixel and centered."""
+    from retarget.cli import camera_intrinsics
+
+    k = camera_intrinsics(640, 480)
+    assert k[0][0] == k[1][1]  # square pixels
+    assert k[0][2] == 320.0
+    assert k[1][2] == 240.0
+    assert k[2] == [0.0, 0.0, 1.0]
+    # fx = (h/2) / tan(fovy/2) for the MuJoCo default 45 deg vertical fov.
+    import math
+
+    assert k[0][0] == pytest.approx(240.0 / math.tan(math.radians(45.0) / 2.0))
+
+
+def test_write_camera_manifest(tmp_path: Path) -> None:
+    """camera.json records mount, intrinsics and per-frame entries."""
+    import json
+
+    from retarget.cli import (
+        CAMERA_JSON_FILENAME,
+        load_camera_config,
+        resolve_camera_resolution,
+        write_camera_manifest,
+    )
+
+    camera_cfg = load_camera_config({"camera": {"link": "d435_link", "depth": True}})
+    camera_cfg["width"], camera_cfg["height"] = resolve_camera_resolution(
+        camera_cfg, None
+    )
+    assert (camera_cfg["width"], camera_cfg["height"]) == (640, 480)
+    timestamps = np.asarray([0.0, 1 / 30.0, 2 / 30.0])
+    depth_stats = [
+        {
+            "index": i,
+            "depth_filename": f"{i:06d}.npy",
+            "depth_min": 0.1,
+            "depth_max": 5.0,
+            "depth_mean": 1.0,
+        }
+        for i in range(3)
+    ]
+    path = write_camera_manifest(tmp_path, camera_cfg, timestamps, depth_stats)
+    assert path == tmp_path / CAMERA_JSON_FILENAME
+
+    data = json.loads(path.read_text())
+    assert data["stage"] == "retarget_camera"
+    assert data["camera"]["link"] == "d435_link"
+    assert data["camera"]["intrinsics"][0][0] > 0
+    assert data["depth_enabled"] is True
+    assert data["frame_count"] == 3
+    assert data["entries"][1] == {
+        "index": 1,
+        "rgb_filename": "000001.png",
+        "depth_filename": "000001.npy",
+        "timestamp_sec": 1 / 30.0,
+        "depth_min": 0.1,
+        "depth_max": 5.0,
+        "depth_mean": 1.0,
+    }
+
+
+def test_write_camera_manifest_without_depth(tmp_path: Path) -> None:
+    """Without depth, entries carry null depth fields."""
+    import json
+
+    from retarget.cli import (
+        load_camera_config,
+        resolve_camera_resolution,
+        write_camera_manifest,
+    )
+
+    camera_cfg = load_camera_config({"camera": {"link": "pelvis"}})
+    camera_cfg["width"], camera_cfg["height"] = resolve_camera_resolution(
+        camera_cfg, None
+    )
+    path = write_camera_manifest(tmp_path, camera_cfg, np.asarray([0.0, 0.1]), None)
+    data = json.loads(path.read_text())
+    assert data["depth_enabled"] is False
+    assert data["depth_dir"] is None
+    assert data["entries"][0]["depth_filename"] is None
+
+
+def test_resolve_camera_resolution_explicit_wins() -> None:
+    """Explicit width/height in the camera config are used as-is."""
+    from retarget.cli import load_camera_config, resolve_camera_resolution
+
+    camera_cfg = load_camera_config(
+        {"camera": {"link": "pelvis", "width": 320, "height": 240}}
+    )
+    assert resolve_camera_resolution(camera_cfg, None) == (320, 240)
+
+
+def test_resolve_camera_resolution_probes_source_video(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Missing width/height is inferred from frames.json's source_video."""
+    from retarget.cli import load_camera_config, resolve_camera_resolution
+
+    video = tmp_path / "source.mp4"
+    frames_json = tmp_path / "frames.json"
+    frames_json.write_text(json.dumps({"source_video": str(video), "entries": []}))
+    monkeypatch.setattr("retarget.cli.probe_video_resolution", lambda path: (1280, 720))
+
+    camera_cfg = load_camera_config({"camera": {"link": "pelvis"}})
+    assert resolve_camera_resolution(camera_cfg, frames_json) == (1280, 720)
+
+    # A partially-specified config is also completed from the source video.
+    partial = load_camera_config({"camera": {"link": "pelvis", "width": 640}})
+    assert resolve_camera_resolution(partial, frames_json) == (1280, 720)
+
+
+def test_resolve_camera_resolution_falls_back_when_unavailable(
+    tmp_path: Path,
+) -> None:
+    """No frames.json / no source_video -> built-in default resolution."""
+    from retarget.cli import (
+        CAMERA_DEFAULT_HEIGHT,
+        CAMERA_DEFAULT_WIDTH,
+        load_camera_config,
+        resolve_camera_resolution,
+    )
+
+    camera_cfg = load_camera_config({"camera": {"link": "pelvis"}})
+    assert resolve_camera_resolution(camera_cfg, None) == (
+        CAMERA_DEFAULT_WIDTH,
+        CAMERA_DEFAULT_HEIGHT,
+    )
+    missing = tmp_path / "missing.json"
+    assert resolve_camera_resolution(camera_cfg, missing) == (
+        CAMERA_DEFAULT_WIDTH,
+        CAMERA_DEFAULT_HEIGHT,
+    )
+    no_video = tmp_path / "frames.json"
+    no_video.write_text(json.dumps({"entries": []}))
+    assert resolve_camera_resolution(camera_cfg, no_video) == (
+        CAMERA_DEFAULT_WIDTH,
+        CAMERA_DEFAULT_HEIGHT,
+    )
+
+
+def test_probe_video_resolution_parses_ffprobe(tmp_path: Path, monkeypatch) -> None:
+    """ffprobe JSON is parsed into (width, height)."""
+    import shutil
+    import subprocess
+
+    from retarget.cli import probe_video_resolution
+
+    video = tmp_path / "source.mp4"
+    video.touch()
+    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/ffprobe")
+
+    class FakeProc:
+        returncode = 0
+        stdout = '{"streams": [{"width": 1920, "height": 1080}]}'
+        stderr = ""
+
+    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: FakeProc())
+    assert probe_video_resolution(video) == (1920, 1080)
+
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr="boom"
+        ),
+    )
+    with pytest.raises(RuntimeError, match="boom"):
+        probe_video_resolution(video)

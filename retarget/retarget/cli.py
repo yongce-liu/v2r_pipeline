@@ -11,10 +11,12 @@ The flow:
 
 Optional visualization after writing:
 
-  * ``--vis`` renders a third-person video of the retargeted motion to
-    ``trajectory_vis.mp4`` next to the npz (offscreen, headless-safe);
+  * ``--third-person-vis`` renders a third-person video of the retargeted
+    motion to ``trajectory_vis.mp4`` next to the npz (offscreen, headless-safe);
   * ``--mujoco`` replays the motion in the interactive mujoco viewer, looping
-    until the window is closed or the process is interrupted (Ctrl-C).
+    until the window is closed or the process is interrupted (Ctrl-C);
+  * a ``camera`` entry in the IK config renders per-frame views from a camera
+    mounted on a robot body (see :func:`load_camera_config` for the schema).
 
 Frame timestamps come from the process step's frame manifest
 ``outputs/<input-stem>/process/frames.json`` (override with ``--frames-json``),
@@ -58,7 +60,7 @@ class RetargetArgs:
     ``outputs/<input-stem>/process/frames.json``. When the default file is
     absent, each source frame's own timestamp is used instead."""
 
-    vis: bool = False
+    third_person_vis: bool = False
     """Render a third-person video of the retargeted motion to
     ``trajectory_vis.mp4`` next to the npz."""
 
@@ -66,39 +68,220 @@ class RetargetArgs:
     """Replay the retargeted motion in the interactive mujoco viewer, looping
     until the window is closed or the process is interrupted (Ctrl-C)."""
 
-    head_camera: bool = False
-    """Render first-person frames from a camera mounted on the robot's head,
-    writing RGB PNGs and float32 depth NPYs into the ``head_camera_rgb/`` and
-    ``head_camera_depth/`` subdirectories of the output dir."""
-
-    head_camera_width: int = 640
-    """Head-camera render width in pixels."""
-
-    head_camera_height: int = 480
-    """Head-camera render height in pixels."""
-
-    head_camera_body: str = "d435_link"
-    """Robot body the head camera is mounted on (follows its motion)."""
-
-    head_camera_pos: tuple[float, float, float] = (0.0, 0.0, 0.0)
-    """Camera offset (x, y, z) in meters relative to the mount body."""
-
-    head_camera_quat: tuple[float, float, float, float] = (
-        0.7071068,
-        0.0,
-        -0.7071068,
-        0.0,
-    )
-    """Camera orientation (w, x, y, z) relative to the mount body.
-
-    Defaults to looking along the mount body's +x (Unitree forward axis)."""
-
 
 TRAJECTORY_FILENAME = "trajectory.npz"
 """Trajectory filename inside the per-episode ``retarget/`` dir, fixed in code."""
 
 VIS_FILENAME = "trajectory_vis.mp4"
-"""Rendered video filename next to ``trajectory.npz``, written by ``--vis``."""
+"""Third-person video filename next to ``trajectory.npz``."""
+
+
+def load_camera_config(ik_config: dict) -> dict | None:
+    """Normalize the optional ``camera`` entry of an IK config.
+
+    The camera schema describes where to mount a render camera on the robot
+    and which outputs to produce::
+
+        "camera": {
+          "link": "d435_link",        # robot body the camera follows
+          "pos_offset": [0, 0, 0],    # position offset (x, y, z) in meters
+          "orn_offset": [1, 0, 0, 0], # orientation offset (w, x, y, z)
+          "width": 1280,              # optional render width (inferred from
+          "height": 720,              #   source video when omitted)
+          "depth": true               # optional: also write depth NPYs + manifest
+        }
+
+    Returns ``None`` when no camera is configured, otherwise a normalized dict
+    with keys ``link``, ``pos_offset``, ``orn_offset``, ``width``, ``height``,
+    and ``depth``.
+    """
+    camera = ik_config.get("camera")
+    if not camera:
+        return None
+    if not isinstance(camera, dict):
+        raise ValueError("ik config 'camera' must be a dict")
+
+    link = camera.get("link")
+    if not link:
+        raise ValueError("ik config 'camera' requires a 'link' to mount on")
+
+    pos_offset = tuple(camera.get("pos_offset", (0.0, 0.0, 0.0)))
+    if len(pos_offset) != 3:
+        raise ValueError("'camera.pos_offset' must have 3 elements (x, y, z)")
+    orn_offset = tuple(camera.get("orn_offset", (1.0, 0.0, 0.0, 0.0)))
+    if len(orn_offset) != 4:
+        raise ValueError("'camera.orn_offset' must have 4 elements (w, x, y, z)")
+
+    return {
+        "link": str(link),
+        "pos_offset": tuple(float(value) for value in pos_offset),
+        "orn_offset": tuple(float(value) for value in orn_offset),
+        "width": int(camera["width"]) if camera.get("width") is not None else None,
+        "height": int(camera["height"]) if camera.get("height") is not None else None,
+        "depth": bool(camera.get("depth", False)),
+    }
+
+
+CAMERA_JSON_FILENAME = "camera.json"
+"""Per-frame camera manifest filename inside the retarget output dir."""
+
+CAMERA_FOVY_DEG = 45.0
+"""Camera vertical field of view used by the injected camera (MuJoCo default)."""
+
+CAMERA_DEFAULT_WIDTH = 640
+"""Fallback render width when the camera config omits it and the source video
+resolution cannot be probed."""
+
+CAMERA_DEFAULT_HEIGHT = 480
+"""Fallback render height when the camera config omits it and the source video
+resolution cannot be probed."""
+
+
+def probe_video_resolution(video_path: Path) -> tuple[int, int]:
+    """Probe a video file's pixel resolution with ffprobe."""
+    import json
+    import shutil
+    import subprocess
+
+    if not video_path.is_file():
+        raise FileNotFoundError(f"source video not found: {video_path}")
+    if shutil.which("ffprobe") is None:
+        raise FileNotFoundError("ffprobe executable not found on PATH")
+    result = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=width,height",
+            "-of",
+            "json",
+            str(video_path),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"ffprobe failed on {video_path}: {result.stderr.strip()}")
+    streams = json.loads(result.stdout).get("streams") or []
+    if not streams:
+        raise ValueError(f"no video stream found in {video_path}")
+    width = int(streams[0]["width"])
+    height = int(streams[0]["height"])
+    if width <= 0 or height <= 0:
+        raise ValueError(f"invalid resolution {width}x{height} from {video_path}")
+    return width, height
+
+
+def resolve_camera_resolution(
+    camera_cfg: dict,
+    frames_json: Path | None,
+) -> tuple[int, int]:
+    """Pick the camera render resolution.
+
+    Explicit ``width``/``height`` in the camera config win. Otherwise the
+    resolution is inferred from the ``source_video`` entry of the process
+    ``frames.json`` via ffprobe; when that is unavailable the built-in default
+    is used.
+    """
+    width = camera_cfg.get("width")
+    height = camera_cfg.get("height")
+    if width is not None and height is not None:
+        return int(width), int(height)
+
+    if frames_json is not None and frames_json.is_file():
+        try:
+            import json
+
+            data = json.loads(Path(frames_json).read_text(encoding="utf-8"))
+            source_video = data.get("source_video")
+            if source_video:
+                video = Path(source_video)
+                if not video.is_file():
+                    video = Path.cwd() / video
+                width, height = probe_video_resolution(video)
+                print(f"Inferred camera resolution {width}x{height} from {video}")
+                return width, height
+        except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
+            print(f"Could not infer camera resolution from {frames_json}: {exc}")
+
+    print(
+        "Falling back to default camera resolution "
+        f"{CAMERA_DEFAULT_WIDTH}x{CAMERA_DEFAULT_HEIGHT}"
+    )
+    return CAMERA_DEFAULT_WIDTH, CAMERA_DEFAULT_HEIGHT
+
+
+def camera_intrinsics(width: int, height: int) -> list[list[float]]:
+    """Square-pixel 3x3 intrinsics matrix for the injected camera."""
+    focal = (height / 2.0) / np.tan(np.radians(CAMERA_FOVY_DEG) / 2.0)
+    return [
+        [float(focal), 0.0, width / 2.0],
+        [0.0, float(focal), height / 2.0],
+        [0.0, 0.0, 1.0],
+    ]
+
+
+def write_camera_manifest(
+    output_dir: Path,
+    camera_cfg: dict,
+    timestamps: np.ndarray,
+    depth_stats: list[dict] | None,
+) -> Path:
+    """Write ``camera.json`` describing the rendered camera frames.
+
+    The manifest records the camera mount/intrinsics and one entry per frame
+    (RGB filename, optional depth filename, timestamp). Depth stats come from
+    :func:`retarget.visualize.render_camera_frames`.
+    """
+    import json
+
+    frame_count = len(timestamps)
+    depth_enabled = depth_stats is not None
+    entries = []
+    for index in range(frame_count):
+        entries.append(
+            {
+                "index": index,
+                "rgb_filename": f"{index:06d}.png",
+                "depth_filename": (
+                    depth_stats[index]["depth_filename"] if depth_enabled else None
+                ),
+                "timestamp_sec": float(timestamps[index]),
+                "depth_min": depth_stats[index]["depth_min"] if depth_enabled else None,
+                "depth_max": depth_stats[index]["depth_max"] if depth_enabled else None,
+                "depth_mean": depth_stats[index]["depth_mean"]
+                if depth_enabled
+                else None,
+            }
+        )
+
+    width = camera_cfg["width"]
+    height = camera_cfg["height"]
+    manifest = {
+        "schema_version": "1.0",
+        "stage": "retarget_camera",
+        "camera": {
+            "name": "camera",
+            "link": camera_cfg["link"],
+            "pos_offset": list(camera_cfg["pos_offset"]),
+            "orn_offset": list(camera_cfg["orn_offset"]),
+            "width": width,
+            "height": height,
+            "fovy_deg": CAMERA_FOVY_DEG,
+            "intrinsics": camera_intrinsics(width, height),
+        },
+        "frame_count": frame_count,
+        "rgb_dir": "camera_rgb",
+        "depth_dir": "camera_depth" if depth_enabled else None,
+        "depth_enabled": depth_enabled,
+        "entries": entries,
+    }
+    path = output_dir / CAMERA_JSON_FILENAME
+    path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    return path
 
 
 def load_source_type(ik_config: Path) -> str:
@@ -222,7 +405,7 @@ def main(args: RetargetArgs | None = None) -> None:
     )
     print(f"Wrote {len(qpos)} frame(s), action shape {action.shape} -> {output}")
 
-    if args.vis or args.mujoco:
+    if args.third_person_vis or args.mujoco:
         from retarget.visualize import (
             load_playback,
             launch_viewer,
@@ -231,37 +414,47 @@ def main(args: RetargetArgs | None = None) -> None:
 
         model = retargeter.gmr.model
         playback = load_playback(model, output)
-        if args.vis:
+        if args.third_person_vis:
             render_video(playback, output_dir / VIS_FILENAME)
         if args.mujoco:
             launch_viewer(playback)
 
-    if args.head_camera:
+    camera_cfg = load_camera_config(ik_config_data)
+    if camera_cfg is not None:
         from retarget.visualize import (
-            HEAD_CAMERA_DEPTH_DIRNAME,
-            HEAD_CAMERA_RGB_DIRNAME,
-            build_head_camera_model,
+            CAMERA_DEPTH_DIRNAME,
+            CAMERA_RGB_DIRNAME,
+            build_camera_model,
             load_playback,
-            render_head_camera_frames,
+            render_camera_frames,
         )
 
-        camera_model, camera_id = build_head_camera_model(
+        camera_cfg["width"], camera_cfg["height"] = resolve_camera_resolution(
+            camera_cfg, frames_json
+        )
+        camera_model, camera_id = build_camera_model(
             robot_xml,
-            body_name=args.head_camera_body,
-            pos=args.head_camera_pos,
-            quat=args.head_camera_quat,
-            width=args.head_camera_width,
-            height=args.head_camera_height,
+            body_name=camera_cfg["link"],
+            pos=camera_cfg["pos_offset"],
+            quat=camera_cfg["orn_offset"],
+            width=camera_cfg["width"],
+            height=camera_cfg["height"],
         )
         camera_playback = load_playback(camera_model, output)
-        render_head_camera_frames(
+        depth_stats = render_camera_frames(
             camera_playback,
             camera_id,
-            output_dir / HEAD_CAMERA_RGB_DIRNAME,
-            output_dir / HEAD_CAMERA_DEPTH_DIRNAME,
-            width=args.head_camera_width,
-            height=args.head_camera_height,
+            output_dir / CAMERA_RGB_DIRNAME,
+            depth_dir=(
+                output_dir / CAMERA_DEPTH_DIRNAME if camera_cfg["depth"] else None
+            ),
+            width=camera_cfg["width"],
+            height=camera_cfg["height"],
         )
+        manifest_path = write_camera_manifest(
+            output_dir, camera_cfg, timestamps, depth_stats
+        )
+        print(f"Wrote camera manifest -> {manifest_path}")
 
 
 if __name__ == "__main__":

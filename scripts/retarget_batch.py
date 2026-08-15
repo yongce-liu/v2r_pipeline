@@ -1,11 +1,12 @@
-"""Batch-run retarget + head-camera rendering across many EgoDex episodes.
+"""Batch-run retarget + camera rendering across many EgoDex episodes.
 
 Every ``*.hdf5`` under ``--input-root`` is retargeted with ``--ik-config`` and
-rendered from the robot head camera (RGB PNGs + float32 depth NPYs). Outputs
-land in ``<output-root>/<rel-dir>/<episode>/retarget/``, mirroring the input
-path so episodes that share a name across tasks never collide.
+rendered from the camera declared by the ik config's ``camera`` entry (RGB PNGs,
+plus depth NPYs and a ``camera.json`` manifest when enabled). Outputs land in
+``<output-root>/<rel-dir>/<episode>/retarget/``, mirroring the input path so
+episodes that share a name across tasks never collide.
 
-Episodes whose ``head_camera_rgb/000000.png`` already exists are skipped, so an
+Episodes whose ``camera_rgb/000000.png`` already exists are skipped, so an
 interrupted run resumes by re-invoking the same command.
 
 Usage:
@@ -57,7 +58,7 @@ def episode_output_dir(args: BatchArgs, hdf5: Path) -> Path:
 def run_episode(args: BatchArgs, hdf5: Path) -> tuple[Path, str, str | None]:
     """Retarget one episode; returns (output_dir, status, error-or-None)."""
     output_dir = episode_output_dir(args, hdf5)
-    if (output_dir / "head_camera_rgb" / "000000.png").is_file():
+    if (output_dir / "camera_rgb" / "000000.png").is_file():
         return output_dir, "skipped", None
 
     proc = subprocess.run(
@@ -71,7 +72,6 @@ def run_episode(args: BatchArgs, hdf5: Path) -> tuple[Path, str, str | None]:
             str(args.ik_config),
             "--output-dir",
             str(output_dir),
-            "--head-camera",
         ],
         cwd=REPO_ROOT,
         capture_output=True,
