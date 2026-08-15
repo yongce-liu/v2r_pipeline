@@ -1,6 +1,7 @@
 ckpts
 inputs
 outputs
+outputs_orig
 assets
 envs
 tmp

@@ -1,3 +1,0 @@
-[submodule "ego_sim_render"]
-	path = ego_sim_render
-	url = https://github.com/yongce-liu/ego_sim_render.git
