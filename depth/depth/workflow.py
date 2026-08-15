@@ -301,6 +301,8 @@ def _depth_manifest_dict(
     entries: list[DepthEntry],
 ) -> dict:
     return {
+        "schema_version": "1.0",
+        "stage": "depth",
         "source_frames_json": str(args.frames_json.expanduser().resolve()),
         "source_video": manifest.source_video,
         "fps": manifest.fps,
@@ -308,6 +310,7 @@ def _depth_manifest_dict(
         "height": manifest.height,
         "frame_format": manifest.format,
         "frame_count": manifest.frame_count,
+        "frames_dir": str(depths_dir),
         "processed_count": len(entries),
         "depth_format": "npy",
         "depths_dir": str(depths_dir),

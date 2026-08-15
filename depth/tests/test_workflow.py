@@ -70,6 +70,9 @@ def test_run_video_depth_with_vis_npz(tmp_path: Path) -> None:
     assert vis == ["000000.png", "000001.png", "000002.png"]
 
     manifest = json.loads(outputs.depth_json_path.read_text(encoding="utf-8"))
+    assert manifest["schema_version"] == "1.0"
+    assert manifest["stage"] == "depth"
+    assert manifest["frames_dir"] == str(outputs.depths_dir)
     assert manifest["frame_count"] == 3
     assert manifest["processed_count"] == 3
     assert manifest["vis_enabled"] is True

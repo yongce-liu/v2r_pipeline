@@ -148,6 +148,8 @@ def _mask_manifest_dict(
     entries: list[MaskEntry],
 ) -> dict:
     return {
+        "schema_version": "1.0",
+        "stage": "segment",
         "source_frames_json": str(args.frames_json.expanduser().resolve()),
         "source_video": manifest.source_video,
         "fps": manifest.fps,
@@ -155,6 +157,7 @@ def _mask_manifest_dict(
         "height": manifest.height,
         "frame_format": manifest.format,
         "frame_count": manifest.frame_count,
+        "frames_dir": str(masks_dir),
         "processed_count": len(entries),
         "masks_dir": str(masks_dir),
         "masks_vis_dir": str(masks_vis_dir) if masks_vis_dir is not None else None,

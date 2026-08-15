@@ -7,6 +7,9 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
+# Shared frame-manifest schema version (all stages write these common keys).
+FRAME_MANIFEST_SCHEMA_VERSION = "1.0"
+
 
 @dataclass(frozen=True)
 class FrameManifestEntry:
@@ -42,13 +45,16 @@ class FrameManifest:
 
     def to_dict(self) -> dict:
         return {
+            "schema_version": FRAME_MANIFEST_SCHEMA_VERSION,
+            "stage": "process",
             "source_video": self.source_video,
             "fps": self.fps,
             "width": self.width,
             "height": self.height,
-            "format": self.format,
             "frame_count": self.frame_count,
             "frames_dir": self.frames_dir,
+            "frame_format": self.format,
+            "format": self.format,
             "entries": [entry.to_dict() for entry in self.entries],
             "ffmpeg_version": self.ffmpeg_version,
         }

@@ -150,6 +150,8 @@ def _inpaint_manifest_dict(
     entries: list[LamaEntry],
 ) -> dict:
     return {
+        "schema_version": "1.0",
+        "stage": "inpaint",
         "backend": "lama",
         "source_masks_json": str(args.masks_json.expanduser().resolve()),
         "source_frames_json": mask_manifest.source_frames_json,
@@ -159,6 +161,7 @@ def _inpaint_manifest_dict(
         "height": mask_manifest.height,
         "frame_format": mask_manifest.frame_format,
         "frame_count": mask_manifest.frame_count,
+        "frames_dir": str(inpainted_dir),
         "processed_count": len(entries),
         "masked_count": sum(1 for entry in entries if entry.has_mask),
         "inpaint_format": "png",

@@ -1,7 +1,7 @@
 # depth
 
 Depth Anything 3 depth estimation for `v2r_pipeline`, as a single image or as a
-whole video (frame-by-frame, reading the `process` stage's `frames.json`).
+whole video (frame-by-frame, reading any stage's shared frame manifest).
 
 ## Install
 
@@ -22,12 +22,19 @@ uv run python -m depth.cli --command single \
   --single.da3.device auto
 ```
 
-Whole video (reads the `process` stage output; writes one aggregate file plus
-per-frame depth maps):
+Whole video (reads a shared frame manifest; writes one aggregate file plus
+per-frame depth maps). Any stage's manifest works — process frames, segment
+masks, or inpainted frames:
 
 ```bash
 uv run python -m depth.cli --command video \
   --video.frames-json outputs/0/process/frames.json \
+  --video.vis \
+  --video.da3.model-path <path/to/depth-anything-3-checkpoint>
+
+# same for the inpaint stage's output images:
+uv run python -m depth.cli --command video \
+  --video.frames-json outputs/0/inpaint/inpainted.json \
   --video.vis \
   --video.da3.model-path <path/to/depth-anything-3-checkpoint>
 ```
@@ -46,13 +53,32 @@ outputs/0/depth/
 
 The single aggregate file holds the whole clip's depths stacked as
 `(frame_count, height, width)` float32 plus per-frame `(3, 3)` intrinsics and
-timestamps. The `process` stage's `frames.json` (frame paths + timestamps) is
+timestamps. Frame paths and timestamps come from the source manifest and are
 resolved via `depth.json` / `depths.npz` rather than by guessing filenames.
+
+## Shared frame manifest
+
+All stages write the same common keys, so any stage's JSON can feed a
+downstream stage directly; extra stage-specific keys are kept alongside:
+
+- `schema_version` — `"1.0"` (shared frame-manifest schema version).
+- `stage` — the producing stage (`process` / `segment` / `inpaint` / `depth`).
+- `frames_dir` — directory holding that stage's main output images; `depth`
+  resolves every entry's `frame_filename` against it.
+- `frame_format` — output image format (`png` / `jpg`).
+- `entries` — per-frame records with `index`, `frame_filename`,
+  `timestamp_sec`, plus stage-specific keys (e.g. `mask_filename`,
+  `inpainted_filename`, `depth_filename`).
+
+For example `inpainted.json` sets `frames_dir` to `.../inpaint/inpainted`, so
+`depth` estimates depth from the inpainted frames; `masks.json` points at
+`.../segment/masks`.
 
 ## Options
 
 - `--command single|video` — one image, or every frame of a video (default `video`).
-- `--video.frames-json <path>` — the `process` stage's `frames.json`.
+- `--video.frames-json <path>` — any stage's shared frame manifest
+  (`frames.json`, `masks.json`, `inpainted.json`, ...).
 - `--video.vis` / `--video.no-vis` — write colorized per-frame depth maps (default on).
 - `--video.max-frames <N>` — limit the number of frames processed (default all).
 - `--video.aggregate-format npz|pkl|json` — aggregate file format (default `npz`).
