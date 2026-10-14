@@ -4,8 +4,9 @@ Two axes, dispatched with ``--command`` and ``--backend``:
 
 - ``command``: ``single`` (one masked frame) or ``video`` (frame-by-frame,
   reading the ``segment`` stage's ``masks.json``).
-- ``backend``: ``qwen`` (Qwen-Image-Edit), ``lama`` (simple-lama big-lama) or
-  ``propainter`` (streaming video ProPainter).
+- ``backend``: ``qwen`` (Qwen-Image-Edit), ``lama`` (simple-lama big-lama),
+  ``propainter`` (streaming video ProPainter) or ``minimax``
+  (MiniMax-Remover video object removal).
 
 Usage:
 
@@ -39,6 +40,12 @@ Usage:
     uv run python -m inpaint.cli --command video --backend propainter \
         --video.masks-json outputs/0/segment/masks.json \
         --video.vis --video.propainter.model-dir ckpts/propainter
+
+    # Full video with MiniMax-Remover (video-only backend). The upstream
+    # implementation is vendored; only the model snapshot is external.
+    uv run python -m inpaint.cli --command video --backend minimax \
+        --video.masks-json outputs/0/segment/masks.json \
+        --video.vis --video.minimax.model-path ckpts/minimax-remover
 """
 
 from __future__ import annotations
@@ -53,6 +60,7 @@ from loguru import logger
 from inpaint.lama.args import LamaInpaintArgs
 from inpaint.lama.simple import SimpleLamaInpainter
 from inpaint.lama.workflow import LamaVideoArgs, run_lama_video_inpaint
+from inpaint.minimax.workflow import MiniMaxVideoArgs, run_minimax_video_inpaint
 from inpaint.propainter.args import ProPainterInpaintArgs
 from inpaint.propainter.workflow import (
     ProPainterVideoArgs,
@@ -85,24 +93,23 @@ class SingleImageArgs:
 
 @dataclass
 class InpaintCliArgs:
-    """Run hand/arm-removal inpainting (Qwen-Image-Edit, LaMa or ProPainter),
-    single image or full video."""
+    """Run hand/arm-removal inpainting (Qwen-Image-Edit, LaMa, ProPainter or
+    MiniMax-Remover), single image or full video."""
 
     command: Literal["single", "video"] = "video"
     """One masked image (``single``) or every masked frame of a video
     (``video``, reading the segment stage's masks.json)."""
 
-    backend: Literal["qwen", "lama", "propainter"] = "propainter"
-    """Inpainting backend: ``qwen`` (Qwen-Image-Edit), ``lama`` (big-lama via
-    simple-lama-inpainting) or ``propainter`` (streaming video ProPainter,
-    video-only)."""
+    backend: Literal["qwen", "lama", "propainter", "minimax"] = "propainter"
+    """Inpainting backend: ``qwen``, ``lama``, ``propainter`` or ``minimax``.
+    ProPainter and MiniMax-Remover are video-only."""
 
     single: SingleImageArgs = field(default_factory=SingleImageArgs)
     """Settings for ``--command single``."""
 
     video: InpaintVideoArgs = field(default_factory=InpaintVideoArgs)
-    """Settings for ``--command video`` (shared; ``--video.qwen.*`` /
-    ``--video.lama.*`` select the backend)."""
+    """Settings for ``--command video``; the nested ``--video.<backend>.*``
+    fields select the backend-specific configuration."""
 
 
 def inpaint_single_image(
@@ -145,10 +152,10 @@ def main() -> None:
     args = tyro.cli(InpaintCliArgs)
 
     if args.command == "single":
-        if args.backend == "propainter":
+        if args.backend in {"propainter", "minimax"}:
             raise ValueError(
-                "--backend propainter is a video-only backend: use --command "
-                "video with --video.masks-json instead."
+                f"--backend {args.backend} is a video-only backend: use "
+                "--command video with --video.masks-json instead."
             )
         if args.single.image_path is None or args.single.output_path is None:
             raise ValueError(
@@ -166,6 +173,21 @@ def main() -> None:
             "[inpaint] single-image {} edit complete: {}",
             args.backend,
             output,
+        )
+        return
+
+    if args.backend == "minimax":
+        minimax_args = MiniMaxVideoArgs(
+            masks_json=args.video.masks_json,
+            output_root=args.video.output_root,
+            vis=args.video.vis,
+            max_frames=args.video.max_frames,
+            minimax=args.video.minimax,
+        )
+        run_minimax_video_inpaint(minimax_args)
+        logger.info(
+            "[inpaint] minimax video inpainting complete: {}",
+            args.video.masks_json,
         )
         return
 

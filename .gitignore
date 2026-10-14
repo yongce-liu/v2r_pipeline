@@ -6,6 +6,7 @@ assets
 envs
 tmp
 .vscode
+docs
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

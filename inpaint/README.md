@@ -1,8 +1,8 @@
 # inpaint
 
-Hand/arm-removal inpainting for `v2r_pipeline`, run per frame and reading the
-`segment` stage's `masks.json` (which references the `process` stage's frame
-manifest). Three backends are available:
+Hand/arm-removal inpainting for `v2r_pipeline`, reading the `segment` stage's
+`masks.json` (which references the `process` stage's frame manifest). Four
+backends are available:
 
 - **Qwen-Image-Edit** (default): the SAM3 hand/arm mask is painted over the
   frame with a solid color, Qwen-Image-Edit removes the hand/arm and completes
@@ -14,6 +14,11 @@ manifest). Three backends are available:
   completion + transformer, inpainting the whole clip in one pass so the fill
   propagates across frames; results go to `outputs/<clip>/inpaint/`. See the
   "ProPainter backend" section below.
+- **MiniMax-Remover** (whole-video diffusion removal): a distilled 3-D DiT
+  conditioned on clean frames plus binary masks. It is CUDA-only and uses a
+  local model snapshot; the two upstream implementation files are vendored in
+  the package. Results use the same output contract. See the
+  "MiniMax-Remover backend" section below.
 
 ## Install
 
@@ -25,9 +30,9 @@ uv sync
 ## Usage
 
 The CLI is two axes: `--command single|video` (one masked frame or every masked
-frame of a video) and `--backend qwen|lama|propainter` (which inpainting
-backend). ProPainter is a whole-video backend, so it only supports
-`--command video`.
+frame of a video) and `--backend qwen|lama|propainter|minimax` (which
+inpainting backend). ProPainter and MiniMax-Remover are whole-video backends,
+so they only support `--command video`.
 
 Whole video with Qwen (frame-by-frame, reading the `segment` stage output):
 
@@ -312,6 +317,96 @@ uv run python -m inpaint.cli --command video --backend propainter \
 Keep the default `pp-window-size`/`pp-stride` (the package's window-index math
 is picky about non-default combinations on short clips). If a run still hits
 CUDA OOM, the backend now reports a hint to lower `resize-ratio` further.
+
+
+## MiniMax-Remover backend (`minimax`)
+
+A whole-video object-removal backend using the official
+[MiniMax-Remover](https://github.com/zibojia/MiniMax-Remover) implementation and
+[model checkpoint](https://huggingface.co/zibojia/minimax-remover). Frames are
+fed clean with the real binary mask; the pipeline internally zeroes the masked
+region. It is the temporal diffusion alternative to the per-frame Qwen/LaMa
+backends and the optical-flow-based ProPainter backend.
+
+### Upstream source and checkpoint
+
+The upstream project is not a pip package. Its two required implementation
+files are vendored in this package at revision
+`28e12b450d8a72a7547b86940a4985e6ad90d75b`:
+- `inpaint/inpaint/minimax/upstream/transformer_minimax_remover.py`
+- `inpaint/inpaint/minimax/upstream/pipeline_minimax_remover.py`
+
+No submodule and no external source checkout are required. The only external
+runtime asset is the local Hugging Face checkpoint below. The vendored files
+record their upstream URL and revision in their provenance header; local
+changes are limited to package-relative imports and using the configured
+execution device.
+
+Download the checkpoint explicitly (runtime downloads are disabled), keeping the
+Hugging Face directory layout expected by `from_pretrained`:
+
+```bash
+hf download zibojia/minimax-remover --local-dir ckpts/minimax-remover
+```
+
+The checkpoint is distributed under **CC-BY-NC-4.0**. The upstream source
+repository does not declare a separate repository license at the vendored
+revision. Review these terms before using the backend in a commercial or
+redistributed artifact.
+
+### Usage
+
+```bash
+uv run python -m inpaint.cli --command video --backend minimax \
+    --video.masks-json ../outputs/0/segment/masks.json \
+    --video.vis \
+    --video.minimax.model-path ../ckpts/minimax-remover
+```
+
+The default inference size is `480x832` fp16. The adapter preserves the source
+resolution for the pipeline output: the generated frame is resized back and
+composited only inside a dilated binary mask, so pixels outside that region are
+copied exactly from the source. The upstream temporal VAE expects `4k+1` frames;
+short selections are padded by repeating the last frame for inference and the
+padding is discarded before writing outputs.
+
+Frames without a detected mask receive an all-zero mask and remain pixel-exact.
+`inpainted.json`, `config.json`, `inpainted/` and `inpainted_vis/` use the same
+schema and filenames as the other inpaint backends.
+
+### Options
+
+- `--<scope>.minimax.model-path <path>` — local HF snapshot containing `vae/`,
+  `transformer/` and `scheduler/` (default `ckpts/minimax-remover`).
+- `--<scope>.minimax.device auto|cuda[:N]` — CUDA device (default `auto`).
+- `--<scope>.minimax.height <N>` / `--<scope>.minimax.width <N>` — network
+  inference dimensions, divisible by 16 (defaults `480` / `832`).
+- `--<scope>.minimax.auto-orientation` / `.no-auto-orientation` — swap the
+  configured dimensions for portrait clips (default `True`).
+- `--<scope>.minimax.steps <N>` — scheduler steps (default `12`; the distilled
+  model can use as few as `6`).
+- `--<scope>.minimax.mask-dilation <N>` — upstream mask-condition dilation
+  iterations (default `12`; an ablation on the 94-frame demo clip reduced
+  SAM3 re-detected residual hands from `5/94` at `6` to `0/94` at `12`).
+- `--<scope>.minimax.post-mask-dilation <N>` — source-pixel dilation used for
+  output compositing (default `24`; this matched the mask-condition ablation
+  and keeps the generated blend outside the tight hand contour).
+- `--<scope>.minimax.seed <N>` and `.overwrite` / `.no-overwrite` — deterministic
+  noise seed and output reuse behavior.
+
+The backend is CUDA-only and only supports `--command video`; the vendored
+pipeline runs fp16 inference.
+
+Validation on the 94-frame `outputs/0` clip (1920x1080, 480x832 inference):
+- baseline `mask_dilation=6, post_mask_dilation=8, steps=12`: 5/94 frames
+  re-detected as residual hand by the same SAM3 prompt;
+- improved `mask_dilation=12, post_mask_dilation=24, steps=12`: 0/94;
+- `steps=6` still had 1/94 residual frames, while `steps=24` reached 0/94 but
+  increased inference from about 61 s to 99 s on the same GPU;
+- the existing ProPainter output had 1/94 residual frames in the same audit.
+  Full-sequence MiniMax inference used about 7.47 GiB peak VRAM. This is an
+  object-level consistency check, not a full perceptual-quality metric, and
+  the dilation defaults may need retuning for other mask sources/resolutions.
 
 ## Notes on the NVFP4 checkpoint
 

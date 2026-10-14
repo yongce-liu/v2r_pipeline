@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "inpaint"
 version = "0.1.0"
-description = "Hand/arm removal inpainting for EgoDataPipe segment outputs (Qwen-Image-Edit, LaMa and ProPainter backends)"
+description = "Hand/arm removal inpainting for EgoDataPipe segment outputs (Qwen-Image-Edit, LaMa, ProPainter and MiniMax-Remover backends)"
 readme = "README.md"
 requires-python = ">=3.10,<3.11"
 dependencies = [
@@ -15,6 +15,8 @@ dependencies = [
   "tyro>=1.0.13",
   "loguru>=0.7.3",
   "safetensors>=0.4.0",
+  "scipy>=1.14.0,<2",
+  "einops==0.8.0",
   "comfy-kitchen==0.2.31",
   "diffusers>=0.36.0",
   "torch==2.10.0+cu128",

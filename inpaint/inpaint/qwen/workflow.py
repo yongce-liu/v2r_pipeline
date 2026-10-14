@@ -41,6 +41,7 @@ from inpaint.media import (
     save_image,
     save_side_by_side,
 )
+from inpaint.minimax.args import MiniMaxRemoverInpaintArgs
 from inpaint.propainter.args import ProPainterInpaintArgs
 from inpaint.qwen.inpainter import QwenInpaintArgs, QwenInpainter
 
@@ -54,8 +55,8 @@ DEFAULT_MASK_COLOR_RGB = (0, 0, 255)
 class InpaintVideoArgs:
     """Arguments for frame-by-frame inpainting of a whole video.
 
-    Shared by all backends; ``qwen`` / ``lama`` / ``propainter`` hold the
-    backend-specific settings (selected by ``--backend``).
+    Shared by all backends; ``qwen`` / ``lama`` / ``propainter`` / ``minimax``
+    hold the backend-specific settings (selected by ``--backend``).
     """
 
     masks_json: Path | None = None
@@ -84,6 +85,11 @@ class InpaintVideoArgs:
 
     propainter: ProPainterInpaintArgs = field(default_factory=ProPainterInpaintArgs)
     """ProPainter settings (used when ``--backend propainter``)."""
+
+    minimax: MiniMaxRemoverInpaintArgs = field(
+        default_factory=MiniMaxRemoverInpaintArgs
+    )
+    """MiniMax-Remover settings (used when ``--backend minimax``)."""
 
 
 @dataclass(frozen=True)

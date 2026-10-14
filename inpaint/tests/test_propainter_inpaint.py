@@ -162,7 +162,7 @@ def test_run_propainter_video_inpaint_with_vis(tmp_path: Path) -> None:
     config = json.loads(outputs.config_json_path.read_text(encoding="utf-8"))
     assert config["package"]["name"] == "inpaint.propainter"
     assert config["backend"] == "propainter"
-    assert config["inpaint"]["mask_dilation"] == 4
+    assert config["inpaint"]["mask_dilation"] == 10
     assert config["inpaint"]["vis"] is True
 
 
